@@ -839,11 +839,11 @@ pct   = round(len(df_lib) / total * 100, 1) if total else 0
 
 st.markdown('<div class="kpi-panel"><div class="kpi-panel-title">Resultado Geral da Simulacao</div>', unsafe_allow_html=True)
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Analisados",     f"{total:,}")
-c2.metric("Liberados",      f"{len(df_lib):,}")
-c3.metric("Bloqueados",     f"{len(df_bloq):,}")
+c1.metric("Pedidos Analisados",     f"{total:,}")
+c2.metric("Pedidos Liberados",      f"{len(df_lib):,}")
+c3.metric("Pedidos Bloqueados",     f"{len(df_bloq):,}")
 c4.metric("Taxa Liberacao", f"{pct:.1f}%")
-c5.metric("Itens em Falta", f"{int(df_falt['FALTA_TOTAL'].sum()) if not df_falt.empty else 0:,}")
+c5.metric("Itens Unicos Faltantes", f"{df_falt['ITEM'].nunique() if not df_falt.empty else 0:,}")
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
