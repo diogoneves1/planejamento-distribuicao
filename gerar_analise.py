@@ -1,20 +1,60 @@
 import pandas as pd
+import os
+import sys
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, PieChart, Reference
 from openpyxl.chart.series import DataPoint
 from datetime import date
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
-print("Iniciando análise...")
+# ──────────────────────────────────────────────────────────────────────────────
+# JANELA DE SELEÇÃO DE ARQUIVO
+# ──────────────────────────────────────────────────────────────────────────────
+root = tk.Tk()
+root.withdraw()
+root.attributes("-topmost", True)
+
+print("Aguardando seleção da planilha base...")
+
+ARQUIVO_BASE = filedialog.askopenfilename(
+    title="Selecione a planilha base",
+    filetypes=[("Planilha Excel", "*.xlsx *.xls"), ("Todos os arquivos", "*.*")]
+)
+
+if not ARQUIVO_BASE:
+    messagebox.showerror("Erro", "Nenhum arquivo selecionado. Encerrando.")
+    sys.exit()
+
+pasta_saida = os.path.dirname(ARQUIVO_BASE)
+ARQUIVO = os.path.join(pasta_saida, f"resultado_{date.today().strftime('%Y%m%d')}.xlsx")
+
+print(f"Arquivo selecionado : {ARQUIVO_BASE}")
+print(f"Resultado sera salvo: {ARQUIVO}")
+print("Iniciando analise...")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. LER E PADRONIZAR
 # ──────────────────────────────────────────────────────────────────────────────
-df = pd.read_excel("base.xlsx")
+df = pd.read_excel(ARQUIVO_BASE)
 df.columns = df.columns.str.strip().str.upper()
 
 print("Colunas encontradas:", df.columns.tolist())
+
+# Validar colunas obrigatórias
+COLUNAS_OBRIGATORIAS = [
+    "PEDIDO", "CLIENTE", "ESTADO", "REGIÃO",
+    "FATURAR EM", "ITEM", "QNTD PROGRAMADA", "ESTOQUE INICIAL"
+]
+faltando = [c for c in COLUNAS_OBRIGATORIAS if c not in df.columns]
+if faltando:
+    messagebox.showerror(
+        "Colunas ausentes",
+        f"A planilha nao possui as colunas obrigatorias:\n{', '.join(faltando)}"
+    )
+    sys.exit()
 
 df["FATURAR EM"]      = pd.to_datetime(df["FATURAR EM"], errors="coerce").dt.date
 df["QNTD PROGRAMADA"] = pd.to_numeric(df["QNTD PROGRAMADA"], errors="coerce").fillna(0)
@@ -138,7 +178,7 @@ print(f"  Taxa de liberacao  : {pct_lib}%")
 # ──────────────────────────────────────────────────────────────────────────────
 # 7. EXPORTAR EXCEL
 # ──────────────────────────────────────────────────────────────────────────────
-ARQUIVO = "resultado.xlsx"
+# ARQUIVO já definido no bloco de seleção acima
 
 COR_NAVY   = "0054A6"
 COR_VERDE  = "217A3C"
@@ -507,3 +547,15 @@ wb.save(ARQUIVO)
 print(f"\nArquivo gerado: {ARQUIVO}")
 print("Abas: VISAO_GERENCIAL | LIBERADOS | NAO_LIBERADOS | CONSUMO_ITEM | FALTAS_ITEM | ESTOQUE_FINAL | RESUMO | POR_REGIAO")
 print("Analise finalizada com sucesso.")
+
+messagebox.showinfo(
+    "Analise Concluida",
+    f"Relatorio gerado com sucesso!\n\n"
+    f"Pedidos analisados : {total}\n"
+    f"Liberados          : {len(df_lib)}\n"
+    f"Bloqueados         : {len(df_bloq)}\n"
+    f"Taxa de liberacao  : {pct_lib}%\n\n"
+    f"Arquivo salvo em:\n{ARQUIVO}"
+)
+
+os.startfile(ARQUIVO)
