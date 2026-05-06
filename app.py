@@ -843,7 +843,7 @@ c1.metric("Pedidos Analisados",     f"{total:,}")
 c2.metric("Pedidos Liberados",      f"{len(df_lib):,}")
 c3.metric("Pedidos Bloqueados",     f"{len(df_bloq):,}")
 c4.metric("Taxa Liberacao", f"{pct:.1f}%")
-c5.metric("Itens Unicos Faltantes", f"{df_falt['ITEM'].nunique() if not df_falt.empty else 0:,}")
+c5.metric("Total de SKUs em Falta", f"{df_falt['ITEM'].nunique() if not df_falt.empty else 0:,}")
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
