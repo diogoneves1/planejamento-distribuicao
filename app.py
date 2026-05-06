@@ -1,855 +1,940 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 from io import BytesIO
 from datetime import date
-import openpyxl
-from openpyxl.styles import (
-    PatternFill, Font, Alignment, Border, Side, GradientFill
-)
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.chart import BarChart, Reference
 
-# =========================
-# CONFIGURAÇÃO DA PÁGINA
-# =========================
+# ──────────────────────────────────────────────────────────────────────────────
+# CONFIGURAÇÃO
+# ──────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Planejamento de Liberação",
-    page_icon="📦",
+    page_title="Liberacao de Pedidos",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# =========================
-# ESTILOS VISUAIS
-# =========================
+# ──────────────────────────────────────────────────────────────────────────────
+# TEMA — Visual corporativo moderno
+#
+#  Topbar        #0054A6  (azul primário)
+#  Sidebar       #FFFFFF  com borda direita #E8ECF2
+#  Fundo página  #F4F6FA
+#  Cards         #FFFFFF  borda #E8ECF2  radius 8px
+#  Primário      #0054A6
+#  Primário dark #003D80
+#  Fonte         Inter
+# ──────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ── FONTE BASE ── */
+/* ── Reset base ── */
 html, body, [class*="css"], .stApp {
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif !important;
-    font-size: 15px;
-    color: #1a2340;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    font-size: 13px;
+    color: #1C2B4A;
+    -webkit-font-smoothing: antialiased;
 }
-
-/* ── FUNDO GERAL ── */
 .stApp {
-    background-color: #EFF2FA;
+    background-color: #F4F6FA;
 }
 
-/* ══════════════════════════════════════
-   SIDEBAR — fundo azul escuro
-══════════════════════════════════════ */
+/* ════════════════════════════════════════════
+   TOPBAR — barra azul fixa no topo
+════════════════════════════════════════════ */
+.totvs-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #0054A6;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    height: 52px;
+    border-bottom: 1px solid #003D80;
+    margin: -1rem -1rem 0 -1rem;
+}
+.totvs-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.totvs-logo {
+    font-size: 15px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.02em;
+}
+.totvs-logo span {
+    font-weight: 300;
+    opacity: 0.75;
+}
+.totvs-divider {
+    width: 1px;
+    height: 20px;
+    background: rgba(255,255,255,0.25);
+}
+.totvs-page-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.88);
+    letter-spacing: 0.01em;
+}
+.totvs-topbar-right {
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.55);
+}
+
+/* ════════════════════════════════════════════
+   SIDEBAR — branca, borda direita sutil
+════════════════════════════════════════════ */
 section[data-testid="stSidebar"] {
-    background: linear-gradient(170deg, #0A1648 0%, #182B78 100%) !important;
+    background-color: #FFFFFF !important;
+    border-right: 1px solid #E8ECF2 !important;
 }
 
-/* Títulos da sidebar */
+/* Títulos de grupo */
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3,
 section[data-testid="stSidebar"] h4 {
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-    font-size: 1rem !important;
+    color: #1C2B4A !important;
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    margin: 0 !important;
 }
 
-/* Parágrafos / descrições na sidebar */
+/* Parágrafos */
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] .stMarkdown p {
-    color: #C5D0EA !important;
-    font-size: 0.80rem !important;
-    line-height: 1.5;
+    color: #00000 !important;
+    font-size: 11.5px !important;
+    line-height: 1.55;
 }
 
-/* Labels dos widgets na sidebar */
+/* ── Labels — legíveis, escuros ── */
 section[data-testid="stSidebar"] label,
-section[data-testid="stSidebar"] .stWidgetLabel,
-section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
-    color: #E8EDF8 !important;
-    font-weight: 600 !important;
-    font-size: 0.88rem !important;
-}
-
-/* Radio buttons — texto legível */
-section[data-testid="stSidebar"] div[role="radiogroup"] label p,
-section[data-testid="stSidebar"] div[role="radiogroup"] label span {
-    color: #FFFFFF !important;
-    font-size: 0.9rem !important;
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label,
+section[data-testid="stSidebar"] .stWidgetLabel p {
+    color: #1C2B4A !important;
+    font-size: 11.5px !important;
     font-weight: 500 !important;
 }
 
-/* Multiselect — texto das opções selecionadas (tags) */
-section[data-testid="stSidebar"] span[data-baseweb="tag"] span {
-    color: #FFFFFF !important;
-    font-weight: 600 !important;
-}
-section[data-testid="stSidebar"] span[data-baseweb="tag"] {
-    background-color: rgba(255,255,255,0.18) !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
+/* Radio */
+section[data-testid="stSidebar"] div[role="radiogroup"] label p,
+section[data-testid="stSidebar"] div[role="radiogroup"] label span,
+section[data-testid="stSidebar"] div[role="radiogroup"] label {
+    color: #1C2B4A !important;
+    font-size: 12px !important;
+    font-weight: 400 !important;
 }
 
-/* Input de texto / data na sidebar */
+/* Inputs */
 section[data-testid="stSidebar"] input {
-    background: rgba(255,255,255,0.12) !important;
-    color: #FFFFFF !important;
-    border: 1.5px solid rgba(255,255,255,0.25) !important;
-    border-radius: 8px !important;
-    font-size: 0.9rem !important;
+    background: #FFFFFF !important;
+    color: #1C2B4A !important;
+    border: 1px solid #C8D0E4 !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+    transition: border-color 0.15s !important;
+}
+section[data-testid="stSidebar"] input:focus {
+    border-color: #0054A6 !important;
+    box-shadow: 0 0 0 3px rgba(0,84,166,0.12) !important;
 }
 section[data-testid="stSidebar"] input::placeholder {
-    color: rgba(255,255,255,0.45) !important;
+    color: #9CAABE !important;
 }
 
-/* Select / dropdown na sidebar */
+/* Select */
 section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-    background: rgba(255,255,255,0.10) !important;
-    border: 1.5px solid rgba(255,255,255,0.22) !important;
-    border-radius: 8px !important;
-    color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    border: 1px solid #C8D0E4 !important;
+    border-radius: 6px !important;
+    color: #1C2B4A !important;
+}
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div:focus-within {
+    border-color: #0054A6 !important;
+    box-shadow: 0 0 0 3px rgba(0,84,166,0.12) !important;
 }
 section[data-testid="stSidebar"] div[data-baseweb="select"] input {
-    color: #FFFFFF !important;
+    color: #1C2B4A !important;
     background: transparent !important;
     border: none !important;
 }
-section[data-testid="stSidebar"] div[data-baseweb="select"] [data-testid="stMarkdownContainer"] p {
-    color: #FFFFFF !important;
-}
 
-/* Placeholder do select */
-section[data-testid="stSidebar"] div[data-baseweb="select"] [data-testid="stWidgetLabel"] + div p {
-    color: rgba(255,255,255,0.5) !important;
+/* Tags multiselect */
+section[data-testid="stSidebar"] span[data-baseweb="tag"] {
+    background-color: #EBF2FF !important;
+    border: 1px solid #BDD3F5 !important;
+    border-radius: 4px !important;
 }
-
-/* Ícone de fechar (x) das tags do multiselect */
+section[data-testid="stSidebar"] span[data-baseweb="tag"] span {
+    color: #003D80 !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+}
 section[data-testid="stSidebar"] [data-baseweb="tag"] svg {
-    fill: #FFFFFF !important;
+    fill: #5A8AC8 !important;
 }
 
-/* Upload button */
+/* Divisor */
+section[data-testid="stSidebar"] hr {
+    border-color: #E8ECF2 !important;
+    margin: 14px 0 !important;
+}
+
+/* File uploader */
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
-    background: rgba(255,255,255,0.08) !important;
-    border-radius: 12px;
-    border: 1.5px dashed rgba(255,255,255,0.25) !important;
-    padding: 10px;
+    background: #F7F9FC !important;
+    border: 1.5px dashed #C8D0E4 !important;
+    border-radius: 8px !important;
 }
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] p,
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] span,
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] small {
-    color: #C5D0EA !important;
+    color: #5A6A8A !important;
+    font-size: 11.5px !important;
 }
 
-/* Divisor hr na sidebar */
-section[data-testid="stSidebar"] hr {
-    border-color: rgba(255,255,255,0.12) !important;
-    margin: 14px 0 !important;
-}
-
-/* Success box na sidebar */
+/* Alert sidebar */
 section[data-testid="stSidebar"] .stAlert {
-    background: rgba(15,122,69,0.25) !important;
-    border: 1px solid rgba(15,200,100,0.35) !important;
-    border-radius: 10px !important;
-    color: #a8f0c8 !important;
+    background: #EBF2FF !important;
+    border: 1px solid #BDD3F5 !important;
+    border-radius: 6px !important;
+    color: #003D80 !important;
+    font-size: 11.5px !important;
 }
 
-/* ══════════════════════════════════════
-   CONTEÚDO PRINCIPAL
-══════════════════════════════════════ */
+/* ════════════════════════════════════════════
+   ÁREA PRINCIPAL
+════════════════════════════════════════════ */
 
-/* Títulos */
 h1, h2, h3 {
-    color: #0D1B5E !important;
-    font-weight: 800 !important;
+    color: #1C2B4A !important;
+    font-weight: 700 !important;
 }
 
-/* CARDS DE MÉTRICAS */
+/* ── Métricas — card branco faixa azul ── */
 [data-testid="stMetric"] {
-    background: white;
-    border-radius: 16px;
-    padding: 22px 26px;
-    border-top: 4px solid #182B78;
-    box-shadow: 0 2px 14px rgba(24,43,120,0.09);
+    background: #FFFFFF !important;
+    border-radius: 8px !important;
+    padding: 18px 20px !important;
+    border: 1px solid #E8ECF2 !important;
+    border-top: 3px solid #0054A6 !important;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.06) !important;
 }
 [data-testid="stMetric"] label,
 [data-testid="stMetric"] [data-testid="stMetricLabel"] p {
     color: #5A6A8A !important;
-    font-size: 0.75rem !important;
-    font-weight: 700 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
 }
 [data-testid="stMetric"] [data-testid="stMetricValue"] {
-    color: #0D1B5E !important;
-    font-size: 2.1rem !important;
-    font-weight: 800 !important;
-    line-height: 1.1;
+    color: #1C2B4A !important;
+    font-size: 1.80rem !important;
+    font-weight: 700 !important;
+    line-height: 1.15 !important;
 }
 
-/* BOTÃO PRINCIPAL */
+/* ── Botão primário ── */
 .stButton > button {
-    background: linear-gradient(135deg, #182B78, #1e3a9f) !important;
-    color: white !important;
-    border-radius: 10px !important;
-    font-weight: 700 !important;
-    font-size: 0.95rem !important;
+    background-color: #0054A6 !important;
+    color: #FFFFFF !important;
     border: none !important;
-    padding: 10px 24px !important;
-    box-shadow: 0 4px 14px rgba(24,43,120,0.28) !important;
-    transition: all 0.2s ease !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 12.5px !important;
+    padding: 9px 22px !important;
+    letter-spacing: 0.01em !important;
+    box-shadow: 0 1px 4px rgba(0,84,166,0.25) !important;
+    transition: background-color 0.15s, box-shadow 0.15s !important;
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg, #0D1B5E, #182B78) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 20px rgba(24,43,120,0.38) !important;
+    background-color: #003D80 !important;
+    box-shadow: 0 3px 10px rgba(0,84,166,0.35) !important;
 }
 
-/* BOTÃO DOWNLOAD */
+/* ── Botão download — outline ── */
 .stDownloadButton > button {
-    background: linear-gradient(135deg, #0f7a45, #13a05a) !important;
-    color: white !important;
-    border-radius: 10px !important;
-    font-weight: 700 !important;
-    border: none !important;
-    box-shadow: 0 4px 14px rgba(15,122,69,0.28) !important;
+    background-color: #FFFFFF !important;
+    color: #0054A6 !important;
+    border: 1.5px solid #0054A6 !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 12.5px !important;
+    padding: 9px 22px !important;
+    transition: all 0.15s !important;
 }
 .stDownloadButton > button:hover {
-    background: linear-gradient(135deg, #0a5e34, #0f7a45) !important;
+    background-color: #EBF2FF !important;
 }
 
-/* ABAS */
+/* ── Abas — underline azul ── */
 .stTabs [data-baseweb="tab-list"] {
-    background: white;
-    border-radius: 12px;
-    padding: 5px;
-    box-shadow: 0 1px 8px rgba(24,43,120,0.09);
-    gap: 4px;
+    background: #FFFFFF !important;
+    border-bottom: 2px solid #E8ECF2 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    box-shadow: 0 1px 0 #E8ECF2 !important;
 }
 .stTabs [data-baseweb="tab"] {
-    border-radius: 9px;
-    font-weight: 600;
-    font-size: 0.88rem;
-    color: #5A6A8A;
-    padding: 8px 18px;
+    background: transparent !important;
+    border-radius: 0 !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #5A6A8A !important;
+    padding: 11px 20px !important;
+    border-bottom: 2px solid transparent !important;
+    margin-bottom: -2px !important;
+    transition: color 0.15s !important;
 }
 .stTabs [aria-selected="true"] {
-    background: #182B78 !important;
-    color: white !important;
+    color: #0054A6 !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid #0054A6 !important;
+    background: transparent !important;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    color: #0054A6 !important;
+    background: #F4F8FF !important;
 }
 
-/* TABELAS */
+/* ── Tabelas ── */
 [data-testid="stDataFrame"] {
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 2px 10px rgba(24,43,120,0.08);
-}
-
-/* SEPARADORES */
-hr {
-    border-color: #DDE3F0;
-    margin: 22px 0;
-}
-
-/* SELECT área principal */
-div[data-baseweb="select"] > div {
     border-radius: 8px !important;
-    border-color: #C8D0E4 !important;
-    color: #1a2340 !important;
-}
-div[data-baseweb="select"] > div:focus-within {
-    border-color: #182B78 !important;
-    box-shadow: 0 0 0 2px rgba(24,43,120,0.15) !important;
+    border: 1px solid #E8ECF2 !important;
+    overflow: hidden !important;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.05) !important;
 }
 
-/* ALERTA */
+/* ── Expander ── */
+[data-testid="stExpander"] {
+    background: #FFFFFF !important;
+    border: 1px solid #E8ECF2 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.04) !important;
+}
+
+/* ── Divisores ── */
+hr {
+    border-color: #E8ECF2 !important;
+    margin: 16px 0 !important;
+}
+
+/* ── Alertas ── */
 .stAlert {
-    border-radius: 12px;
+    border-radius: 6px !important;
+    font-size: 12.5px !important;
 }
 
-/* BANNER HERO */
-.hero-banner {
-    background: linear-gradient(135deg, #0A1648 0%, #182B78 55%, #1e3a9f 100%);
-    padding: 34px 44px;
-    border-radius: 20px;
-    margin-bottom: 28px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 8px 32px rgba(24,43,120,0.22);
-}
-.hero-banner::before {
-    content: '';
-    position: absolute;
-    top: -50px; right: -50px;
-    width: 220px; height: 220px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 50%;
-}
-.hero-banner::after {
-    content: '';
-    position: absolute;
-    bottom: -70px; right: 90px;
-    width: 300px; height: 300px;
-    background: rgba(255,255,255,0.03);
-    border-radius: 50%;
-}
-.hero-title {
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 1.85rem;
-    font-weight: 800;
-    color: #FFFFFF;
-    margin: 0 0 8px 0;
-    letter-spacing: -0.3px;
-}
-.hero-sub {
-    color: #9DB8E8;
-    font-size: 0.95rem;
-    margin: 0;
-    font-weight: 400;
+/* ── Captions ── */
+.stCaption, [data-testid="stCaptionContainer"] p {
+    color: #5A6A8A !important;
+    font-size: 11px !important;
 }
 
-/* SECTION LABEL */
-.section-label {
-    font-size: 0.68rem;
+/* ── Card de gráfico ── */
+.g-card {
+    background: #FFFFFF;
+    border: 1px solid #E8ECF2;
+    border-radius: 8px;
+    padding: 18px 20px 12px 20px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.05);
+}
+.g-label {
+    font-size: 10.5px;
     font-weight: 700;
-    color: #8BA0C4;
+    color: #5A6A8A;
     text-transform: uppercase;
-    letter-spacing: 0.13em;
-    margin-bottom: 6px;
+    letter-spacing: 0.09em;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #F0F3F8;
 }
+
+/* ── Sidebar — seção e marca ── */
+.sb-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 0 14px 0;
+    border-bottom: 1px solid #E8ECF2;
+    margin-bottom: 16px;
+}
+.sb-brand-icon {
+    width: 32px;
+    height: 32px;
+    background: #0054A6;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: #FFFFFF;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.sb-brand-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #1C2B4A;
+    line-height: 1.2;
+}
+.sb-brand-sub {
+    font-size: 10.5px;
+    color: #5A6A8A;
+    margin-top: 1px;
+}
+.sb-section {
+    font-size: 10px;
+    font-weight: 600;
+    color: #9CAABE;
+    text-transform: uppercase;
+    letter-spacing: 0.11em;
+    margin: 18px 0 8px 0;
+}
+
+/* ── Painel KPI ── */
+.kpi-panel {
+    background: #FFFFFF;
+    border: 1px solid #E8ECF2;
+    border-radius: 8px;
+    padding: 18px 20px 14px 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.05);
+}
+.kpi-panel-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #5A6A8A;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #F0F3F8;
+}
+
+/* ── Breadcrumb ── */
+.breadcrumb {
+    font-size: 11px;
+    color: #9CAABE;
+    margin: 14px 0 6px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.breadcrumb-sep { color: #C8D0E4; }
+.breadcrumb-current { color: #1C2B4A; font-weight: 500; }
 
 </style>
 """, unsafe_allow_html=True)
 
-# =========================
+# ──────────────────────────────────────────────────────────────────────────────
 # CONSTANTES
-# =========================
+# ──────────────────────────────────────────────────────────────────────────────
 COLUNAS_OBRIGATORIAS = [
     "PEDIDO", "CLIENTE", "ESTADO", "REGIÃO",
     "FATURAR EM", "ITEM", "QNTD PROGRAMADA", "ESTOQUE INICIAL"
 ]
 
-# =========================
+C_BLUE  = "#0054A6"
+C_BLUE2 = "#1A73C8"
+C_LGRAY = "#E8ECF2"
+C_RED   = "#C0392B"
+C_AMBER = "#B85C00"
+C_GREEN = "#217A3C"
+C_TEXT  = "#1C2B4A"
+C_MUTED = "#5A6A8A"
+
+# ──────────────────────────────────────────────────────────────────────────────
 # FUNÇÕES DE NEGÓCIO
-# =========================
+# ──────────────────────────────────────────────────────────────────────────────
 
 def preparar_base(df: pd.DataFrame) -> pd.DataFrame:
-    """Padroniza colunas, tipos e valores da base."""
     df = df.copy()
     df.columns = df.columns.str.strip().str.upper()
-
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str).str.strip()
-
-    df["FATURAR EM"] = pd.to_datetime(df["FATURAR EM"], errors="coerce")
+    df["FATURAR EM"]      = pd.to_datetime(df["FATURAR EM"], errors="coerce")
     df["QNTD PROGRAMADA"] = pd.to_numeric(df["QNTD PROGRAMADA"], errors="coerce").fillna(0)
     df["ESTOQUE INICIAL"] = pd.to_numeric(df["ESTOQUE INICIAL"], errors="coerce").fillna(0)
-
     return df
-
 
 def validar_colunas(df: pd.DataFrame) -> list:
-    """Retorna lista de colunas obrigatórias ausentes."""
-    return [col for col in COLUNAS_OBRIGATORIAS if col not in df.columns]
-
+    return [c for c in COLUNAS_OBRIGATORIAS if c not in df.columns]
 
 def montar_estoque(df: pd.DataFrame) -> dict:
-    """
-    Constrói dicionário de estoque por item.
-    Usa o primeiro valor de ESTOQUE INICIAL encontrado para cada item.
-    """
     estoque = {}
     for _, row in df.iterrows():
-        item = row["ITEM"]
-        if item not in estoque:
-            estoque[item] = row["ESTOQUE INICIAL"]
+        if row["ITEM"] not in estoque:
+            estoque[row["ITEM"]] = row["ESTOQUE INICIAL"]
     return estoque
 
-
-def aplicar_filtros_operacionais(
-    df: pd.DataFrame,
-    regioes: list,
-    estados: list,
-    clientes: list
-) -> pd.DataFrame:
-    """Aplica filtros opcionais de região, estado e cliente."""
-    if regioes:
-        df = df[df["REGIÃO"].isin(regioes)]
-    if estados:
-        df = df[df["ESTADO"].isin(estados)]
-    if clientes:
-        df = df[df["CLIENTE"].isin(clientes)]
+def aplicar_filtros(df, regioes, estados, clientes):
+    if regioes:  df = df[df["REGIÃO"].isin(regioes)]
+    if estados:  df = df[df["ESTADO"].isin(estados)]
+    if clientes: df = df[df["CLIENTE"].isin(clientes)]
     return df
 
-
-def ordenar_por_prioridade(
-    df: pd.DataFrame,
-    prioridade_regiao: list,
-    prioridade_estado: list
-) -> pd.DataFrame:
-    """
-    Classifica pedidos em 3 níveis de prioridade:
-      P1 – regiões prioritárias
-      P2 – estados prioritários (excluindo os já P1)
-      P3 – demais
-    Em seguida ordena por prioridade → data de faturamento → número do pedido.
-    """
+def ordenar_prioridade(df, p_regiao, p_estado):
     df = df.copy()
-
-    pedidos_p1 = set()
-    pedidos_p2 = set()
-
-    if prioridade_regiao:
-        pedidos_p1 = set(df[df["REGIÃO"].isin(prioridade_regiao)]["PEDIDO"].unique())
-
-    if prioridade_estado:
-        pedidos_p2 = set(
-            df[df["ESTADO"].isin(prioridade_estado) & ~df["PEDIDO"].isin(pedidos_p1)]["PEDIDO"].unique()
-        )
-
+    p1 = set(df[df["REGIÃO"].isin(p_regiao)]["PEDIDO"].unique()) if p_regiao else set()
+    p2 = set(df[df["ESTADO"].isin(p_estado) & ~df["PEDIDO"].isin(p1)]["PEDIDO"].unique()) if p_estado else set()
     df["ORDEM_PRIORIDADE"] = 3
-    df.loc[df["PEDIDO"].isin(pedidos_p1), "ORDEM_PRIORIDADE"] = 1
-    df.loc[df["PEDIDO"].isin(pedidos_p2), "ORDEM_PRIORIDADE"] = 2
+    df.loc[df["PEDIDO"].isin(p1), "ORDEM_PRIORIDADE"] = 1
+    df.loc[df["PEDIDO"].isin(p2), "ORDEM_PRIORIDADE"] = 2
+    return df.sort_values(["ORDEM_PRIORIDADE", "FATURAR EM", "PEDIDO"], ascending=True)
 
-    return df.sort_values(
-        ["ORDEM_PRIORIDADE", "FATURAR EM", "PEDIDO"],
-        ascending=[True, True, True]
-    )
-
-
-def analisar_pedidos(df_ordem: pd.DataFrame, estoque: dict) -> tuple:
-    """
-    Percorre os pedidos na ordem de prioridade.
-    Libera um pedido somente se TODOS os itens tiverem estoque suficiente.
-    Retorna 5 DataFrames: liberados, não-liberados, consumo, faltas, estoque final.
-    """
-    liberados = []
-    nao_liberados = []
-    consumo_item: dict = {}
-    faltas_item: dict = {}
+def analisar_pedidos(df_ordem, estoque):
+    liberados, bloqueados = [], []
+    consumo_item, faltas_item = {}, {}
 
     for pedido, grupo in df_ordem.groupby("PEDIDO", sort=False):
-        info = grupo.iloc[0]
+        info   = grupo.iloc[0]
         faltas = []
-        pode_liberar = True
+        pode   = True
 
         for _, row in grupo.iterrows():
-            item = row["ITEM"]
-            qtd = row["QNTD PROGRAMADA"]
+            item  = row["ITEM"]
+            qtd   = row["QNTD PROGRAMADA"]
             saldo = estoque.get(item, 0)
-
             if saldo < qtd:
-                pode_liberar = False
-                faltas.append({
-                    "ITEM": item,
-                    "QTD_PEDIDO": qtd,
-                    "ESTOQUE_DISPONIVEL": saldo,
-                    "FALTA": qtd - saldo
-                })
+                pode = False
+                faltas.append({"ITEM": item, "QTD": qtd, "SALDO": saldo, "FALTA": qtd - saldo})
 
-        base_linha = {
-            "PEDIDO": pedido,
-            "CLIENTE": info["CLIENTE"],
-            "ESTADO": info["ESTADO"],
-            "REGIÃO": info["REGIÃO"],
+        base = {
+            "PEDIDO":     pedido,
+            "CLIENTE":    info["CLIENTE"],
+            "ESTADO":     info["ESTADO"],
+            "REGIÃO":     info["REGIÃO"],
             "FATURAR EM": info["FATURAR EM"].date() if pd.notnull(info["FATURAR EM"]) else None,
             "PRIORIDADE": info["ORDEM_PRIORIDADE"],
         }
 
-        if pode_liberar:
-            # Registra e consome estoque
-            itens_pedido = []
+        if pode:
+            itens = []
             for _, row in grupo.iterrows():
-                item = row["ITEM"]
-                qtd = row["QNTD PROGRAMADA"]
+                item, qtd = row["ITEM"], row["QNTD PROGRAMADA"]
                 estoque[item] = estoque.get(item, 0) - qtd
                 consumo_item[item] = consumo_item.get(item, 0) + qtd
-                itens_pedido.append(f"{item} ({int(qtd)})")
-
-            linha = {**base_linha, "ITENS": " | ".join(itens_pedido)}
-            liberados.append(linha)
-
+                itens.append(f"{item} ({int(qtd)})")
+            liberados.append({**base, "ITENS": " | ".join(itens)})
         else:
-            # Registra faltas
-            for i, falta in enumerate(faltas, start=1):
-                base_linha[f"ITEM_{i}"] = falta["ITEM"]
-                base_linha[f"QTD_NECESSÁRIA_{i}"] = falta["QTD_PEDIDO"]
-                base_linha[f"ESTOQUE_DISPONÍVEL_{i}"] = falta["ESTOQUE_DISPONIVEL"]
-                base_linha[f"FALTA_{i}"] = falta["FALTA"]
-                faltas_item[falta["ITEM"]] = faltas_item.get(falta["ITEM"], 0) + falta["FALTA"]
+            for i, f in enumerate(faltas, 1):
+                base[f"ITEM_{i}"]               = f["ITEM"]
+                base[f"QTD_NECESSARIA_{i}"]     = f["QTD"]
+                base[f"ESTOQUE_DISPONIVEL_{i}"] = f["SALDO"]
+                base[f"FALTA_{i}"]              = f["FALTA"]
+                faltas_item[f["ITEM"]] = faltas_item.get(f["ITEM"], 0) + f["FALTA"]
+            bloqueados.append(base)
 
-            nao_liberados.append(base_linha)
+    _ec = pd.DataFrame(columns=["ITEM", "CONSUMO_TOTAL"])
+    _ef = pd.DataFrame(columns=["ITEM", "FALTA_TOTAL"])
+    df_cons = pd.DataFrame([{"ITEM": k, "CONSUMO_TOTAL": v} for k, v in consumo_item.items()]
+                           ).sort_values("CONSUMO_TOTAL", ascending=False) if consumo_item else _ec
+    df_falt = pd.DataFrame([{"ITEM": k, "FALTA_TOTAL": v}   for k, v in faltas_item.items()]
+                           ).sort_values("FALTA_TOTAL",   ascending=False) if faltas_item else _ef
+    df_est  = pd.DataFrame([{"ITEM": k, "ESTOQUE_FINAL": v}  for k, v in estoque.items()]
+                           ).sort_values("ESTOQUE_FINAL",  ascending=False)
+    return pd.DataFrame(liberados), pd.DataFrame(bloqueados), df_cons, df_falt, df_est
 
-    df_liberados = pd.DataFrame(liberados)
-    df_nao_liberados = pd.DataFrame(nao_liberados)
+def calcular_resumo(df_lib, df_bloq, df_cons, df_falt):
+    total = len(df_lib) + len(df_bloq)
+    pct   = round(len(df_lib) / total * 100, 1) if total else 0
+    return pd.DataFrame([
+        {"METRICA": "Total pedidos analisados", "VALOR": total},
+        {"METRICA": "Pedidos liberados",         "VALOR": len(df_lib)},
+        {"METRICA": "Pedidos bloqueados",         "VALOR": len(df_bloq)},
+        {"METRICA": "Taxa de liberacao (%)",      "VALOR": pct},
+        {"METRICA": "Total itens consumidos",     "VALOR": int(df_cons["CONSUMO_TOTAL"].sum()) if not df_cons.empty else 0},
+        {"METRICA": "Total itens em falta",       "VALOR": int(df_falt["FALTA_TOTAL"].sum())   if not df_falt.empty else 0},
+    ])
 
-    df_consumo = pd.DataFrame([
-        {"ITEM": k, "CONSUMO_TOTAL": v} for k, v in consumo_item.items()
-    ]).sort_values("CONSUMO_TOTAL", ascending=False) if consumo_item else pd.DataFrame(columns=["ITEM", "CONSUMO_TOTAL"])
+# ──────────────────────────────────────────────────────────────────────────────
+# EXCEL
+# ──────────────────────────────────────────────────────────────────────────────
 
-    df_faltas = pd.DataFrame([
-        {"ITEM": k, "FALTA_TOTAL": v} for k, v in faltas_item.items()
-    ]).sort_values("FALTA_TOTAL", ascending=False) if faltas_item else pd.DataFrame(columns=["ITEM", "FALTA_TOTAL"])
-
-    df_estoque_final = pd.DataFrame([
-        {"ITEM": k, "ESTOQUE_FINAL_SIMULADO": v} for k, v in estoque.items()
-    ]).sort_values("ESTOQUE_FINAL_SIMULADO", ascending=False)
-
-    return df_liberados, df_nao_liberados, df_consumo, df_faltas, df_estoque_final
-
-
-def calcular_resumo(df_liberados, df_nao_liberados, df_consumo, df_faltas) -> pd.DataFrame:
-    """Monta o DataFrame de resumo gerencial."""
-    total = len(df_liberados) + len(df_nao_liberados)
-    pct = (len(df_liberados) / total * 100) if total > 0 else 0
-
-    linhas = [
-        {"MÉTRICA": "Total de pedidos analisados", "VALOR": total},
-        {"MÉTRICA": "Pedidos liberados", "VALOR": len(df_liberados)},
-        {"MÉTRICA": "Pedidos bloqueados", "VALOR": len(df_nao_liberados)},
-        {"MÉTRICA": "Taxa de liberação (%)", "VALOR": round(pct, 1)},
-        {"MÉTRICA": "Total itens consumidos", "VALOR": int(df_consumo["CONSUMO_TOTAL"].sum()) if not df_consumo.empty else 0},
-        {"MÉTRICA": "Total itens em falta", "VALOR": int(df_faltas["FALTA_TOTAL"].sum()) if not df_faltas.empty else 0},
-    ]
-    return pd.DataFrame(linhas)
-
-
-# =========================
-# GERAÇÃO DO EXCEL FORMATADO
-# =========================
-
-def _estilo_cabecalho(ws, row_num: int, cor_hex: str = "182B78"):
-    """Aplica estilo de cabeçalho em uma linha inteira."""
-    fill = PatternFill("solid", fgColor=cor_hex)
-    font = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
-    align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    border = Border(
-        bottom=Side(style="medium", color="FFFFFF")
-    )
-
-    for cell in ws[row_num]:
-        cell.fill = fill
-        cell.font = font
-        cell.alignment = align
-        cell.border = border
-
-
-def _ajustar_largura(ws):
-    """Ajusta largura de colunas automaticamente."""
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            try:
-                val = str(cell.value) if cell.value else ""
-                max_len = max(max_len, len(val))
-            except Exception:
-                pass
-        ws.column_dimensions[col_letter].width = min(max(max_len + 4, 12), 45)
-
-
-def _zebrar_linhas(ws, inicio: int, cor_par: str = "EEF1FA", cor_impar: str = "FFFFFF"):
-    """Alterna cor de fundo das linhas de dados."""
-    for i, row in enumerate(ws.iter_rows(min_row=inicio, max_row=ws.max_row)):
-        fill_color = cor_par if i % 2 == 0 else cor_impar
-        for cell in row:
-            if cell.fill.fill_type not in ("solid",) or cell.fill.fgColor.rgb in ("182B78", "0f7a45", "9f1313"):
-                cell.fill = PatternFill("solid", fgColor=fill_color)
-            cell.alignment = Alignment(horizontal="left", vertical="center")
-            cell.font = Font(name="Calibri", size=10)
-
-
-def gerar_excel(
-    df_liberados, df_nao_liberados,
-    df_consumo, df_faltas,
-    df_estoque_final, df_resumo
-) -> bytes:
-    """Gera relatório Excel profissional com formatação completa."""
+def gerar_excel(df_lib, df_bloq, df_cons, df_falt, df_est, df_resumo) -> bytes:
     output = BytesIO()
-
+    SHEETS = {
+        "RESUMO":        (df_resumo, "0054A6"),
+        "LIBERADOS":     (df_lib,    "217A3C"),
+        "NAO_LIBERADOS": (df_bloq,   "C0392B"),
+        "CONSUMO_ITEM":  (df_cons,   "0054A6"),
+        "FALTAS_ITEM":   (df_falt,   "C0392B"),
+        "ESTOQUE_FINAL": (df_est,    "217A3C"),
+    }
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-
-        # ----- Abas de dados -----
-        sheets = {
-            "RESUMO": df_resumo,
-            "LIBERADOS": df_liberados,
-            "NÃO_LIBERADOS": df_nao_liberados,
-            "CONSUMO_ITEM": df_consumo,
-            "FALTAS_ITEM": df_faltas,
-            "ESTOQUE_FINAL": df_estoque_final,
-        }
-
-        cores_cabecalho = {
-            "RESUMO": "182B78",
-            "LIBERADOS": "0f7a45",
-            "NÃO_LIBERADOS": "9f1313",
-            "CONSUMO_ITEM": "182B78",
-            "FALTAS_ITEM": "9f1313",
-            "ESTOQUE_FINAL": "0f7a45",
-        }
-
-        for nome, df in sheets.items():
-            df.to_excel(writer, sheet_name=nome, index=False, startrow=0)
+        for nome, (df, cor) in SHEETS.items():
+            df.to_excel(writer, sheet_name=nome, index=False)
             ws = writer.sheets[nome]
-
-            # Cabeçalho colorido
-            _estilo_cabecalho(ws, 1, cores_cabecalho[nome])
-
-            # Linhas alternadas
-            if ws.max_row > 1:
-                _zebrar_linhas(ws, 2)
-
-            # Ajusta larguras
-            _ajustar_largura(ws)
-
-            # Congela cabeçalho
+            for cell in ws[1]:
+                cell.fill      = PatternFill("solid", fgColor=cor)
+                cell.font      = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border    = Border(bottom=Side(style="thin", color="FFFFFF"))
+            for i, row in enumerate(ws.iter_rows(min_row=2, max_row=ws.max_row)):
+                fc = "F4F6FA" if i % 2 == 0 else "FFFFFF"
+                for cell in row:
+                    cell.fill      = PatternFill("solid", fgColor=fc)
+                    cell.font      = Font(name="Calibri", size=10)
+                    cell.alignment = Alignment(horizontal="left", vertical="center")
+            for col in ws.columns:
+                letra = get_column_letter(col[0].column)
+                ml = max((len(str(c.value or "")) for c in col), default=8)
+                ws.column_dimensions[letra].width = min(max(ml + 3, 12), 50)
             ws.freeze_panes = "A2"
-
-            # Filtro automático
-            if ws.max_row > 1 and ws.max_column > 0:
+            if ws.max_row > 1:
                 ws.auto_filter.ref = ws.dimensions
-
     return output.getvalue()
 
+# ──────────────────────────────────────────────────────────────────────────────
+# GRÁFICOS
+# ──────────────────────────────────────────────────────────────────────────────
 
-# =========================
+_L = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(family="Inter, system-ui, sans-serif", size=11, color=C_TEXT),
+
+)
+
+def fig_donut(liberados, bloqueados):
+    total = liberados + bloqueados
+    pct   = round(liberados / total * 100, 1) if total else 0
+    fig   = go.Figure(go.Pie(
+        labels=["Liberados", "Bloqueados"],
+        values=[liberados, bloqueados],
+        hole=0.72,
+        marker=dict(colors=[C_BLUE, "#E4EAF5"], line=dict(color="#FFFFFF", width=2)),
+        textinfo="none",
+        hovertemplate="%{label}: %{value} (%{percent})<extra></extra>",
+    ))
+    fig.add_annotation(
+        text=f"<b style='font-size:24px;color:{C_BLUE}'>{pct}%</b><br>"
+             f"<span style='font-size:11px;color:{C_MUTED}'>liberado</span>",
+        x=0.5, y=0.5, showarrow=False, align="center"
+    )
+    fig.update_layout(
+        **_L, margin=dict(t=6, b=6, l=6, r=6), height=215,
+        showlegend=True,
+        legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.06,
+                    font=dict(size=11, color=C_MUTED)),
+    )
+    return fig
+
+def fig_regiao(df_lib, df_bloq):
+    regioes  = sorted(set(list(df_lib["REGIÃO"].unique()) + list(df_bloq["REGIÃO"].unique())))
+    lib_cnt  = [len(df_lib[df_lib["REGIÃO"]   == r]) for r in regioes]
+    bloq_cnt = [len(df_bloq[df_bloq["REGIÃO"] == r]) for r in regioes]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        name="Liberados",  x=regioes, y=lib_cnt, marker_color=C_BLUE,
+        text=lib_cnt, textposition="outside", textfont=dict(size=11, color=C_TEXT),
+    ))
+    fig.add_trace(go.Bar(
+        name="Bloqueados", x=regioes, y=bloq_cnt, marker_color="#C5D3E8",
+        text=bloq_cnt, textposition="outside", textfont=dict(size=11, color=C_MUTED),
+    ))
+    fig.update_layout(
+        **_L, barmode="group", height=260,
+        margin=dict(t=6, b=6, l=6, r=8),
+        xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_TEXT),
+                   linecolor=C_LGRAY, linewidth=1),
+        yaxis=dict(showgrid=True, gridcolor="#F0F3F8", zeroline=False,
+                   tickfont=dict(size=10, color=C_MUTED)),
+        legend=dict(orientation="h", x=1, xanchor="right", y=1.12,
+                    font=dict(size=11, color=C_MUTED), bgcolor="rgba(0,0,0,0)"),
+    )
+    return fig
+
+def fig_barras_h(df, col_label, col_valor, cor, n=10):
+    df_p = df.nlargest(n, col_valor).sort_values(col_valor, ascending=True)
+    fig  = go.Figure(go.Bar(
+        y=df_p[col_label].astype(str), x=df_p[col_valor],
+        orientation="h", marker_color=cor, marker_line=dict(width=0),
+        text=df_p[col_valor].apply(lambda v: f"{int(v):,}"),
+        textposition="outside", textfont=dict(size=11, color=C_TEXT),
+        hovertemplate="%{y}: %{x:,}<extra></extra>",
+    ))
+    fig.update_layout(
+        **_L, height=max(190, len(df_p) * 32),
+        margin=dict(t=6, b=6, l=6, r=56),
+        xaxis=dict(showgrid=True, gridcolor="#F0F3F8", zeroline=False,
+                   tickfont=dict(size=10, color=C_MUTED)),
+        yaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_TEXT)),
+    )
+    return fig
+
+def fig_estoque(df_est, n=12):
+    df_p  = df_est.nlargest(n, "ESTOQUE_FINAL").sort_values("ESTOQUE_FINAL", ascending=True)
+    cores = [C_RED if v == 0 else C_AMBER if v < 20 else C_BLUE for v in df_p["ESTOQUE_FINAL"]]
+    fig   = go.Figure(go.Bar(
+        y=df_p["ITEM"].astype(str), x=df_p["ESTOQUE_FINAL"],
+        orientation="h", marker_color=cores, marker_line=dict(width=0),
+        text=df_p["ESTOQUE_FINAL"].apply(lambda v: f"{int(v):,}"),
+        textposition="outside", textfont=dict(size=11, color=C_TEXT),
+        hovertemplate="%{y}: %{x:,}<extra></extra>",
+    ))
+    fig.update_layout(
+        **_L, height=max(190, len(df_p) * 32),
+        margin=dict(t=6, b=6, l=6, r=56),
+        xaxis=dict(showgrid=True, gridcolor="#F0F3F8", zeroline=False,
+                   tickfont=dict(size=10, color=C_MUTED)),
+        yaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_TEXT)),
+    )
+    return fig
+
+# ──────────────────────────────────────────────────────────────────────────────
 # SIDEBAR
-# =========================
+# ──────────────────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown("## 📦 Liberação de Pedidos")
-    st.markdown("---")
 
-    arquivo = st.file_uploader(
-        "Carregar planilha base",
-        type=["xlsx"],
-        help="Planilha Excel com pedidos, estoque e datas de faturamento."
-    )
+    st.markdown("""
+    <div class="sb-brand">
+        <div class="sb-brand-icon">LP</div>
+        <div>
+            <div class="sb-brand-name">Liberacao de Pedidos</div>
+            <div class="sb-brand-sub">Simulacao por Estoque</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
+    arquivo = st.file_uploader("Planilha base (.xlsx)", type=["xlsx"])
     if arquivo:
-        st.success("Planilha carregada!")
+        st.success("Planilha carregada.")
 
-    st.markdown("---")
-    st.markdown("#### ⚙️ Configurações")
-
-    st.markdown('<p class="section-label">Filtro de Data</p>', unsafe_allow_html=True)
-    tipo_data = st.radio(
-        "Filtrar por",
-        ["Data específica", "Período"],
-        label_visibility="collapsed"
-    )
-
-    if tipo_data == "Data específica":
-        data_ref = st.date_input("Data de referência", value=date.today())
+    st.markdown('<div class="sb-section">Periodo de Analise</div>', unsafe_allow_html=True)
+    tipo_data = st.radio("Tipo", ["Data especifica", "Periodo"], label_visibility="collapsed")
+    if tipo_data == "Data especifica":
+        data_ref    = st.date_input("Data", value=date.today(), label_visibility="collapsed")
         data_inicio = data_fim = data_ref
     else:
-        data_inicio = st.date_input("Data inicial", value=date.today())
-        data_fim = st.date_input("Data final", value=date.today())
+        data_inicio = st.date_input("Inicio", value=date.today())
+        data_fim    = st.date_input("Fim",    value=date.today())
 
-    st.markdown("---")
-    st.markdown("#### 🏆 Prioridade de Liberação")
-    st.markdown('<p style="color:#9DB4D4;font-size:0.78rem;">Pedidos das regiões/estados escolhidos serão analisados primeiro.</p>', unsafe_allow_html=True)
-
-    # Carrega opções dinâmicas se houver planilha
-    opcoes_regiao = []
-    opcoes_estado = []
-    opcoes_cliente = []
+    opcoes_regiao = opcoes_estado = opcoes_cliente = []
     df_global = None
-
     if arquivo:
         try:
-            df_temp = preparar_base(pd.read_excel(arquivo))
-            erros = validar_colunas(df_temp)
-            if not erros:
-                df_global = df_temp
-                opcoes_regiao = sorted(df_temp["REGIÃO"].dropna().unique().tolist())
-                opcoes_estado = sorted(df_temp["ESTADO"].dropna().unique().tolist())
-                opcoes_cliente = sorted(df_temp["CLIENTE"].dropna().unique().tolist())
+            df_tmp = preparar_base(pd.read_excel(arquivo))
+            if not validar_colunas(df_tmp):
+                df_global      = df_tmp
+                opcoes_regiao  = sorted(df_tmp["REGIÃO"].dropna().unique())
+                opcoes_estado  = sorted(df_tmp["ESTADO"].dropna().unique())
+                opcoes_cliente = sorted(df_tmp["CLIENTE"].dropna().unique())
         except Exception:
             pass
 
-    prioridade_regiao = st.multiselect(
-        "Regiões prioritárias (P1)",
-        opcoes_regiao,
-        placeholder="Todas as regiões..."
-    )
+    st.markdown('<div class="sb-section">Prioridade de Liberacao</div>', unsafe_allow_html=True)
+    st.caption("P1 = regioes  ·  P2 = estados  ·  P3 = demais")
+    p_regiao = st.multiselect("Regioes (P1)", opcoes_regiao, placeholder="Nenhuma")
+    p_estado = st.multiselect("Estados (P2)",  opcoes_estado,  placeholder="Nenhum")
 
-    prioridade_estado = st.multiselect(
-        "Estados prioritários (P2)",
-        opcoes_estado,
-        placeholder="Todos os estados..."
-    )
+    st.markdown('<div class="sb-section">Filtros Operacionais</div>', unsafe_allow_html=True)
+    f_regiao  = st.multiselect("Regiao",  opcoes_regiao,  placeholder="Todas")
+    f_estado  = st.multiselect("Estado",  opcoes_estado,  placeholder="Todos")
+    f_cliente = st.multiselect("Cliente", opcoes_cliente, placeholder="Todos")
 
     st.markdown("---")
-    st.markdown("#### 🔍 Filtros Operacionais")
-    st.markdown('<p style="color:#9DB4D4;font-size:0.78rem;">Restringe a análise a regiões, estados ou clientes específicos.</p>', unsafe_allow_html=True)
+    rodar = st.button("Gerar Analise", use_container_width=True)
 
-    filtro_regiao = st.multiselect("Região", opcoes_regiao, placeholder="Todas...")
-    filtro_estado = st.multiselect("Estado", opcoes_estado, placeholder="Todos...")
-    filtro_cliente = st.multiselect("Cliente", opcoes_cliente, placeholder="Todos...")
+# ──────────────────────────────────────────────────────────────────────────────
+# TOPBAR
+# ──────────────────────────────────────────────────────────────────────────────
 
-    st.markdown("---")
-
-    rodar = st.button("▶ Gerar Análise", use_container_width=True)
-
-
-# =========================
-# ÁREA PRINCIPAL
-# =========================
-
-st.markdown("""
-<div class="hero-banner">
-    <p class="hero-title">📦 Planejamento de Liberação de Pedidos</p>
-    <p class="hero-sub">Simulação de liberação por estoque disponível, prioridade e data de faturamento</p>
+st.markdown(f"""
+<div class="totvs-topbar">
+    <div class="totvs-topbar-left">
+        <div class="totvs-logo">Gestao <span>Operacional</span></div>
+        <div class="totvs-divider"></div>
+        <div class="totvs-page-name">Planejamento de Liberacao de Pedidos</div>
+    </div>
+    <div class="totvs-topbar-right">{date.today().strftime('%d/%m/%Y')}</div>
 </div>
 """, unsafe_allow_html=True)
 
+# Breadcrumb
+st.markdown("""
+<div class="breadcrumb">
+    Estoque <span class="breadcrumb-sep">›</span>
+    Simulacao <span class="breadcrumb-sep">›</span>
+    <span class="breadcrumb-current">Liberacao de Pedidos</span>
+</div>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# VALIDAÇÕES
+# ──────────────────────────────────────────────────────────────────────────────
+
 if not arquivo:
-    st.info("👈 Carregue a planilha base na barra lateral para começar.")
+    st.info("Carregue a planilha base na barra lateral para iniciar a analise.")
     st.stop()
 
 if df_global is None:
     erros = validar_colunas(preparar_base(pd.read_excel(arquivo)))
-    st.error(f"❌ Colunas obrigatórias ausentes: **{', '.join(erros)}**")
-    st.markdown("A planilha deve conter: " + ", ".join(f"`{c}`" for c in COLUNAS_OBRIGATORIAS))
+    st.error(f"Colunas obrigatorias ausentes: {', '.join(erros)}")
+    st.caption("Esperado: " + "  ·  ".join(COLUNAS_OBRIGATORIAS))
     st.stop()
 
 df = df_global
 
-# Exibe prévia da base
-with st.expander("🔎 Visualizar base carregada", expanded=False):
-    st.dataframe(df.head(50), use_container_width=True)
-    st.caption(f"{len(df):,} linhas • {df['PEDIDO'].nunique():,} pedidos únicos • {df['ITEM'].nunique():,} itens únicos")
+with st.expander("Visualizar base carregada", expanded=False):
+    st.dataframe(df.head(100), use_container_width=True, hide_index=True)
+    st.caption(
+        f"{len(df):,} linhas  ·  {df['PEDIDO'].nunique():,} pedidos  "
+        f"·  {df['ITEM'].nunique():,} itens  ·  {df['CLIENTE'].nunique():,} clientes"
+    )
 
 if not rodar:
-    # Exibe estatísticas da base sem rodar análise
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total de linhas", f"{len(df):,}")
-    col2.metric("Pedidos únicos", f"{df['PEDIDO'].nunique():,}")
-    col3.metric("Itens únicos", f"{df['ITEM'].nunique():,}")
-    col4.metric("Clientes únicos", f"{df['CLIENTE'].nunique():,}")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Linhas na base",  f"{len(df):,}")
+    c2.metric("Pedidos unicos",  f"{df['PEDIDO'].nunique():,}")
+    c3.metric("Itens unicos",    f"{df['ITEM'].nunique():,}")
+    c4.metric("Clientes unicos", f"{df['CLIENTE'].nunique():,}")
     st.stop()
 
-# =========================
-# EXECUÇÃO DA ANÁLISE
-# =========================
+# ──────────────────────────────────────────────────────────────────────────────
+# PROCESSAMENTO
+# ──────────────────────────────────────────────────────────────────────────────
 
-with st.spinner("Processando análise..."):
-
-    # Filtro de data
-    df_filtrado = df[
+with st.spinner("Processando..."):
+    df_f = df[
         (df["FATURAR EM"].dt.date >= data_inicio) &
         (df["FATURAR EM"].dt.date <= data_fim)
     ]
-
-    if df_filtrado.empty:
-        st.warning("⚠️ Nenhum pedido encontrado no período selecionado.")
+    if df_f.empty:
+        st.warning("Nenhum pedido no periodo selecionado.")
         st.stop()
 
-    # Filtros operacionais
-    df_filtrado = aplicar_filtros_operacionais(
-        df_filtrado, filtro_regiao, filtro_estado, filtro_cliente
-    )
-
-    if df_filtrado.empty:
-        st.warning("⚠️ Nenhum pedido encontrado com os filtros aplicados.")
+    df_f = aplicar_filtros(df_f, f_regiao, f_estado, f_cliente)
+    if df_f.empty:
+        st.warning("Nenhum pedido com os filtros aplicados.")
         st.stop()
 
-    # Estoque (sempre montado sobre a base completa para não perder itens)
-    estoque = montar_estoque(df)
+    estoque   = montar_estoque(df)
+    df_ordem  = ordenar_prioridade(df_f, p_regiao, p_estado)
+    df_lib, df_bloq, df_cons, df_falt, df_est = analisar_pedidos(df_ordem, estoque)
+    df_resumo = calcular_resumo(df_lib, df_bloq, df_cons, df_falt)
 
-    # Prioridade e ordem
-    df_ordem = ordenar_por_prioridade(df_filtrado, prioridade_regiao, prioridade_estado)
+# ──────────────────────────────────────────────────────────────────────────────
+# KPIs
+# ──────────────────────────────────────────────────────────────────────────────
 
-    # Análise
-    df_lib, df_bloq, df_cons, df_faltas, df_est_final = analisar_pedidos(df_ordem, estoque)
+total = len(df_lib) + len(df_bloq)
+pct   = round(len(df_lib) / total * 100, 1) if total else 0
 
-    # Resumo
-    df_resumo = calcular_resumo(df_lib, df_bloq, df_cons, df_faltas)
-
-# =========================
-# MÉTRICAS GERAIS
-# =========================
-total_analisados = len(df_lib) + len(df_bloq)
-pct_lib = (len(df_lib) / total_analisados * 100) if total_analisados else 0
-
-st.markdown("### 📊 Resultado Geral")
+st.markdown('<div class="kpi-panel"><div class="kpi-panel-title">Resultado Geral da Simulacao</div>', unsafe_allow_html=True)
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Pedidos Analisados", f"{total_analisados:,}")
-c2.metric("✅ Liberados", f"{len(df_lib):,}")
-c3.metric("🔴 Bloqueados", f"{len(df_bloq):,}")
-c4.metric("Taxa de Liberação", f"{pct_lib:.1f}%")
-c5.metric("Itens em Falta", f"{int(df_faltas['FALTA_TOTAL'].sum()) if not df_faltas.empty else 0:,}")
+c1.metric("Analisados",     f"{total:,}")
+c2.metric("Liberados",      f"{len(df_lib):,}")
+c3.metric("Bloqueados",     f"{len(df_bloq):,}")
+c4.metric("Taxa Liberacao", f"{pct:.1f}%")
+c5.metric("Itens em Falta", f"{int(df_falt['FALTA_TOTAL'].sum()) if not df_falt.empty else 0:,}")
+st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown("---")
+st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
-# =========================
-# ABAS DE RESULTADO
-# =========================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "✅ Liberados",
-    "🔴 Não Liberados",
-    "📉 Faltas por Item",
-    "📦 Consumo por Item",
-    "🏪 Estoque Final"
+# ──────────────────────────────────────────────────────────────────────────────
+# ABAS
+# ──────────────────────────────────────────────────────────────────────────────
+
+tab_dash, tab_lib, tab_bloq, tab_falt, tab_cons, tab_est = st.tabs([
+    "Visao Gerencial",
+    "Liberados",
+    "Nao Liberados",
+    "Faltas por Item",
+    "Consumo por Item",
+    "Estoque Final",
 ])
 
-with tab1:
+# ── VISÃO GERENCIAL ──────────────────────────────────────────────────────────
+with tab_dash:
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    col_a, col_b = st.columns([1, 2])
+
+    with col_a:
+        st.markdown('<div class="g-card"><div class="g-label">Taxa de Liberacao</div>', unsafe_allow_html=True)
+        st.plotly_chart(fig_donut(len(df_lib), len(df_bloq)),
+                        use_container_width=True, config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_b:
+        st.markdown('<div class="g-card"><div class="g-label">Liberados vs Bloqueados por Regiao</div>', unsafe_allow_html=True)
+        _lr = df_lib  if not df_lib.empty  else pd.DataFrame(columns=["REGIÃO"])
+        _br = df_bloq if not df_bloq.empty else pd.DataFrame(columns=["REGIÃO"])
+        st.plotly_chart(fig_regiao(_lr, _br),
+                        use_container_width=True, config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# ── LIBERADOS ────────────────────────────────────────────────────────────────
+with tab_lib:
     if df_lib.empty:
         st.warning("Nenhum pedido foi liberado.")
     else:
         st.caption(f"{len(df_lib):,} pedidos liberados")
         st.dataframe(df_lib, use_container_width=True, hide_index=True)
 
-with tab2:
+# ── NAO LIBERADOS ────────────────────────────────────────────────────────────
+with tab_bloq:
     if df_bloq.empty:
-        st.success("🎉 Todos os pedidos foram liberados!")
+        st.success("Todos os pedidos foram liberados.")
     else:
-        st.caption(f"{len(df_bloq):,} pedidos bloqueados por falta de estoque")
+        st.caption(f"{len(df_bloq):,} pedidos bloqueados por insuficiencia de estoque")
         st.dataframe(df_bloq, use_container_width=True, hide_index=True)
 
-with tab3:
-    if df_faltas.empty:
-        st.success("Sem itens em falta.")
+# ── FALTAS ───────────────────────────────────────────────────────────────────
+with tab_falt:
+    if df_falt.empty:
+        st.success("Nenhum item em falta.")
     else:
-        st.caption(f"{len(df_faltas):,} itens com falta")
-        st.dataframe(df_faltas, use_container_width=True, hide_index=True)
+        st.caption(f"{len(df_falt):,} itens com falta registrada")
+        st.dataframe(df_falt, use_container_width=True, hide_index=True)
 
-with tab4:
+# ── CONSUMO ──────────────────────────────────────────────────────────────────
+with tab_cons:
     if df_cons.empty:
         st.info("Sem consumo registrado.")
     else:
         st.caption(f"{len(df_cons):,} itens consumidos")
         st.dataframe(df_cons, use_container_width=True, hide_index=True)
 
-with tab5:
-    st.caption(f"Estoque simulado após liberação dos pedidos possíveis")
-    st.dataframe(df_est_final, use_container_width=True, hide_index=True)
+# ── ESTOQUE FINAL ─────────────────────────────────────────────────────────────
+with tab_est:
+    st.caption("Saldo simulado por item apos liberacao dos pedidos possiveis")
+    st.dataframe(df_est, use_container_width=True, hide_index=True)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# EXPORTAR
+# ──────────────────────────────────────────────────────────────────────────────
 
 st.markdown("---")
-
-# =========================
-# EXPORTAR EXCEL
-# =========================
-st.markdown("### 📥 Exportar Relatório")
-
-excel_bytes = gerar_excel(
-    df_lib, df_bloq, df_cons, df_faltas, df_est_final, df_resumo
-)
-
-col_dl, col_info = st.columns([1, 3])
+col_dl, col_txt = st.columns([1, 3])
 with col_dl:
+    excel_bytes = gerar_excel(df_lib, df_bloq, df_cons, df_falt, df_est, df_resumo)
     st.download_button(
-        label="⬇️ Baixar Relatório Excel",
+        label="Baixar Relatorio Excel",
         data=excel_bytes,
-        file_name=f"relatorio_liberacao_{date.today().strftime('%Y%m%d')}.xlsx",
+        file_name=f"liberacao_{date.today().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
+        use_container_width=True,
     )
-with col_info:
-    st.markdown(f"""
-    <div style="color:#6B7A99;font-size:0.83rem;padding-top:8px;">
-        O arquivo contém <strong>6 abas</strong>: Resumo · Liberados · Não Liberados · Consumo por Item · Faltas por Item · Estoque Final<br>
-        Gerado em {date.today().strftime('%d/%m/%Y')}
-    </div>
-    """, unsafe_allow_html=True)
+with col_txt:
+    st.caption(
+        f"6 abas: Resumo · Liberados · Nao Liberados · Consumo · Faltas · Estoque Final"
+        f"  ·  Gerado em {date.today().strftime('%d/%m/%Y')}"
+    )
