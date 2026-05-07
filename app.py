@@ -354,7 +354,8 @@ def fmt_peso(kg: float) -> str:
     if kg < 1000:
         return br(kg, 0) + " kg"
     else:
-        return br(kg / 1000) + " ton"
+        ton = kg / 1000
+        return f"{ton:,.2f} ton".replace(",", ".")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
