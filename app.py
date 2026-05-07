@@ -349,6 +349,13 @@ def br(v: float, decimais: int = 2) -> str:
     fmt = f"{v:,.{decimais}f}"
     return fmt.replace(",", "X").replace(".", ",").replace("X", ".")
 
+def fmt_peso(kg: float) -> str:
+    """Exibe em kg se < 1000, caso contrário converte para ton."""
+    if kg < 1000:
+        return f"{br(kg, 0)} kg"
+    else:
+        return f"{br(kg / 1000)} ton"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # FUNÇÕES DE NEGÓCIO
