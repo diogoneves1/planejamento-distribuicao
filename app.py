@@ -490,7 +490,7 @@ def calcular_resumo(df_lib, df_bloq, df_cons, df_falt):
         {"METRICA": "Toneladas liberadas",        "VALOR": ton_lib},
         {"METRICA": "Toneladas retidas",          "VALOR": ton_bloq},
         {"METRICA": "Total itens consumidos",     "VALOR": int(df_cons["CONSUMO_TOTAL"].sum()) if not df_cons.empty else 0},
-        {"METRICA": "Total itens em falta",       "VALOR": int(df_falt["FALTA_TOTAL"].sum())   if not df_falt.empty else 0},
+        {"METRICA": "SKUs em falta",              "VALOR": len(df_falt)                         if not df_falt.empty else 0},
     ])
 
 
