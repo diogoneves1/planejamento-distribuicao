@@ -352,9 +352,9 @@ def br(v: float, decimais: int = 2) -> str:
 def fmt_peso(kg: float) -> str:
     """Exibe em kg se < 1000, caso contrário converte para ton."""
     if kg < 1000:
-        return f"{br(kg, 0)} kg"
+        return br(kg, 0) + " kg"
     else:
-        return f"{br(kg / 1000)} ton"
+        return br(kg / 1000) + " ton"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
