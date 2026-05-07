@@ -1146,6 +1146,7 @@ st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
 # linha 2 — toneladas
 if tem_peso:
+    t1, t2, t3 = st.columns(3)
     t1.metric("Peso Liberado",   fmt_peso(ton_lib))
     t2.metric("Peso Retido",     fmt_peso(ton_bloq))
     t3.metric("Total Analisado", fmt_peso(ton_lib + ton_bloq))
