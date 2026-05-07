@@ -980,8 +980,6 @@ with st.sidebar:
         <div class="sb-brand-icon">LP</div>
         <div>
             <div class="sb-brand-name">Liberacao de Pedidos</div>
-            <div class="sb-brand-sub">Versao {VERSION} — Simulacao por Estoque</div>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
