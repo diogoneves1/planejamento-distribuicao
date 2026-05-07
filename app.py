@@ -1141,7 +1141,7 @@ c1.metric("Analisados",      f"{total:,}")
 c2.metric("Liberados",       f"{len(df_lib):,}")
 c3.metric("Bloqueados",      f"{len(df_bloq):,}")
 c4.metric("Taxa Liberacao",  f"{pct:.1f}%")
-c5.metric("Itens em Falta",  f"{int(df_falt['FALTA_TOTAL'].sum()) if not df_falt.empty else 0:,}")
+c5.metric("SKUs em Falta",   f"{len(df_falt):,}")
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
