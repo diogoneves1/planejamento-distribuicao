@@ -541,6 +541,13 @@ def calcular_resumo(df_lib, df_bloq, df_cons, df_falt):
 
 
 def resumo_por_estado(df_lib, df_bloq):
+    # Pegar todos os valores únicos de RESTRICAO no total (lib + bloq)
+    vals_restricao = []
+    for df_tmp in [df_lib, df_bloq]:
+        if not df_tmp.empty and "RESTRICAO" in df_tmp.columns:
+            vals_restricao += df_tmp["RESTRICAO"].dropna().unique().tolist()
+    vals_restricao = sorted(set(vals_restricao))
+
     rows = []
     estados = sorted(set(
         (df_lib["ESTADO"].tolist()  if not df_lib.empty  else []) +
@@ -557,10 +564,14 @@ def resumo_por_estado(df_lib, df_bloq):
             "TON_RETIDAS":    round(bloq_e["PESO_TON"].sum(), 2) if not bloq_e.empty else 0,
         }
         # Contagem dinâmica por valor de RESTRICAO nos liberados
-        if not lib_e.empty and "RESTRICAO" in lib_e.columns:
-            for val in lib_e["RESTRICAO"].dropna().unique():
-                row[f"REST_{val}"] = int((lib_e["RESTRICAO"] == val).sum())
+        for val in vals_restricao:
+            col_nome = f"REST_{val}"
+            if not lib_e.empty and "RESTRICAO" in lib_e.columns:
+                row[col_nome] = int((lib_e["RESTRICAO"] == val).sum())
+            else:
+                row[col_nome] = 0
         rows.append(row)
+
     df = pd.DataFrame(rows).fillna(0)
     if not df.empty:
         df["TOTAL_PEDIDOS"] = df["PED_LIBERADOS"] + df["PED_BLOQUEADOS"]
@@ -725,19 +736,30 @@ def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, d
 
     _preencher(ws, 8, 1, 8, 13, f_sep)
 
-    # Tabela por estado
+    # Tabela por estado — colunas REST_* dinâmicas
+    rest_cols_xls = [c for c in df_estado.columns if c.startswith("REST_")]
+
     _preencher(ws, 9, 1, 9, 13, f_navy)
     ws.row_dimensions[9].height = 13
     _mesclar(ws, 9, 2, 12, "PEDIDOS POR ESTADO", fn_hdr, f_navy, centro)
 
     _preencher(ws, 10, 1, 10, 13, f_navy)
     ws.row_dimensions[10].height = 13
-    for col, lbl in [(2,"ESTADO"),(4,"LIB"),(5,"BLOQ"),(6,"TON LIB"),(8,"TON RETIDA"),(10,"COM REST."),(11,"SEM REST."),(12,"TX%")]:
+    # Headers fixos
+    hdrs_fixos = [(2,"ESTADO"),(4,"LIB"),(5,"BLOQ"),(6,"TON LIB"),(8,"TON RETIDA")]
+    for col, lbl in hdrs_fixos:
         c = ws.cell(10, col)
-        c.value = lbl
-        c.font  = fn_hdr
-        c.alignment = centro
-        c.fill  = f_navy
+        c.value = lbl; c.font = fn_hdr; c.alignment = centro; c.fill = f_navy
+    # Headers dinâmicos de restrição a partir da coluna 10
+    for idx, rcol in enumerate(rest_cols_xls):
+        col = 10 + idx
+        lbl = rcol.replace("REST_", "")
+        c = ws.cell(10, col)
+        c.value = lbl; c.font = fn_hdr; c.alignment = centro; c.fill = f_navy
+    # TX% na última coluna disponível
+    col_tx = 10 + len(rest_cols_xls)
+    c = ws.cell(10, col_tx)
+    c.value = "TX%"; c.font = fn_hdr; c.alignment = centro; c.fill = f_navy
 
     top_est = df_estado.head(6).reset_index(drop=True) if not df_estado.empty else pd.DataFrame()
     for i in range(6):
@@ -747,19 +769,27 @@ def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, d
         _preencher(ws, r, 2, r, 12, fl)
         if i < len(top_est):
             row_d = top_est.iloc[i]
-            dados = [
-                (2,  row_d["ESTADO"],                   fn_normal, esq),
-                (4,  int(row_d["PED_LIBERADOS"]),        fn_verde,  centro),
-                (5,  int(row_d["PED_BLOQUEADOS"]),       fn_azul_v, centro),
-                (6,  _br(row_d["TON_LIBERADAS"]),        fn_verde,  dir_),
-                (8,  _br(row_d["TON_RETIDAS"]),          fn_azul_v, dir_),
-                (10, int(row_d.get("COM_RESTRICAO", 0)), fn_azul_v, centro),
-                (11, int(row_d.get("SEM_RESTRICAO", 0)), fn_verde,  centro),
-                (12, f"{row_d['TX_LIBERACAO']}%",         fn_navy,   centro),
-            ]
-            for col, val, fn, aln in dados:
+            # Dados fixos
+            for col, val, fn, aln in [
+                (2, row_d["ESTADO"],              fn_normal, esq),
+                (4, int(row_d["PED_LIBERADOS"]),  fn_verde,  centro),
+                (5, int(row_d["PED_BLOQUEADOS"]), fn_azul_v, centro),
+                (6, _br(row_d["TON_LIBERADAS"]),  fn_verde,  dir_),
+                (8, _br(row_d["TON_RETIDAS"]),    fn_azul_v, dir_),
+            ]:
                 c = ws.cell(r, col)
                 c.value = val; c.font = fn; c.alignment = aln; c.fill = fl
+            # Dados dinâmicos de restrição
+            for idx, rcol in enumerate(rest_cols_xls):
+                col = 10 + idx
+                c = ws.cell(r, col)
+                c.value = int(row_d.get(rcol, 0))
+                c.font  = fn_azul_v; c.alignment = centro; c.fill = fl
+            # TX%
+            col_tx = 10 + len(rest_cols_xls)
+            c = ws.cell(r, col_tx)
+            c.value = f"{row_d['TX_LIBERACAO']}%"
+            c.font = fn_navy; c.alignment = centro; c.fill = fl
 
     _preencher(ws, 17, 1, 17, 13, f_sep)
 
