@@ -10,12 +10,12 @@ from openpyxl.utils import get_column_letter
 # CONFIGURAÇÃO
 # ──────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Liberacao de Pedidos v2",
+    page_title="Liberacao de Pedidos v3",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-VERSION = "2.0"
+VERSION = "3.0"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ESTILOS
@@ -50,7 +50,7 @@ section[data-testid="stSidebar"] h4 {
 }
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] .stMarkdown p {
-    color: #FFFFF !important;
+    color: #FFFFFF !important;
     font-size: 11.5px !important;
     line-height: 1.55;
 }
@@ -134,9 +134,7 @@ section[data-testid="stSidebar"] .stAlert span,
 section[data-testid="stSidebar"] .stAlert div {
     color: #FFFFFF !important;
 }
-section[data-testid="stSidebar"] .stAlert svg {
-    fill: #FFFFFF !important;
-}
+section[data-testid="stSidebar"] .stAlert svg { fill: #FFFFFF !important; }
 
 /* ── Botões ── */
 .stButton > button {
@@ -319,12 +317,6 @@ hr { border-color: #E8ECF2 !important; margin: 16px 0 !important; }
     margin-bottom: 12px; padding-bottom: 8px;
     border-bottom: 1px solid #F0F3F8;
 }
-
-/* ── Badge prioridade ── */
-.badge-p0 { background:#FFF3CD;color:#856404;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700; }
-.badge-p1 { background:#D1E7DD;color:#0A3622;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700; }
-.badge-p2 { background:#CFE2FF;color:#084298;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700; }
-.badge-p3 { background:#F0F3F8;color:#5A6A8A;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -344,18 +336,17 @@ C_GREEN = "#217A3C"
 C_TEXT  = "#1C2B4A"
 C_MUTED = "#5A6A8A"
 
+
 def br(v: float, decimais: int = 2) -> str:
-    """Formata número no padrão brasileiro: 1.234,56"""
     fmt = f"{v:,.{decimais}f}"
     return fmt.replace(",", "X").replace(".", ",").replace("X", ".")
 
+
 def fmt_peso(kg: float) -> str:
-    """Exibe em kg se < 1000, caso contrário converte para ton."""
     if kg < 1000:
         return br(kg, 0) + " kg"
-    else:
-        ton = kg / 1000
-        return f"{ton:,.2f} ton".replace(",", ".")
+    ton = kg / 1000
+    return f"{ton:,.2f} ton".replace(",", ".")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -365,6 +356,9 @@ def fmt_peso(kg: float) -> str:
 def preparar_base(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = df.columns.str.strip().str.upper()
+    # Normalizar nome da coluna RESTRIÇÃO
+    df.columns = [c.replace("RESTRIÇÃO?", "RESTRICAO").replace("Ã", "A").replace("Ç", "C")
+                  if "RESTRI" in c else c for c in df.columns]
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str).str.strip()
     df["FATURAR EM"]      = pd.to_datetime(df["FATURAR EM"], errors="coerce")
@@ -372,6 +366,28 @@ def preparar_base(df: pd.DataFrame) -> pd.DataFrame:
     df["ESTOQUE INICIAL"] = pd.to_numeric(df["ESTOQUE INICIAL"], errors="coerce").fillna(0)
     if "PESO" in df.columns:
         df["PESO"] = pd.to_numeric(df["PESO"], errors="coerce").fillna(0)
+    # Garantir coluna RESTRICAO e normalizar valores
+    if "RESTRICAO" not in df.columns:
+        df["RESTRICAO"] = "NAO"
+    else:
+        df["RESTRICAO"] = (df["RESTRICAO"]
+            .str.strip()
+            .str.upper()
+            .str.replace("Ã", "A", regex=False)
+            .str.replace("Ç", "C", regex=False)
+            .str.replace("?", "", regex=False)
+        )
+        # Mapear valores conhecidos
+        df["RESTRICAO"] = df["RESTRICAO"].replace({
+            "NAO": "NAO",
+            "SIM": "SIM",
+            "AJUSTAR BASE": "Ajustar Base",
+        }).fillna("NAO")
+    # Garantir coluna STATUS
+    if "STATUS" not in df.columns:
+        df["STATUS"] = "Nao informado"
+    else:
+        df["STATUS"] = df["STATUS"].fillna("Nao informado")
     return df
 
 
@@ -387,41 +403,61 @@ def montar_estoque(df: pd.DataFrame) -> dict:
     return estoque
 
 
-def aplicar_filtros(df, regioes, estados, clientes):
-    if regioes:  df = df[df["REGIÃO"].isin(regioes)]
-    if estados:  df = df[df["ESTADO"].isin(estados)]
-    if clientes: df = df[df["CLIENTE"].isin(clientes)]
+def aplicar_filtros(df, regioes, estados, clientes, restricoes, pedidos_filtro):
+    if regioes:        df = df[df["REGIÃO"].isin(regioes)]
+    if estados:        df = df[df["ESTADO"].isin(estados)]
+    if clientes:       df = df[df["CLIENTE"].isin(clientes)]
+    if restricoes:     df = df[df["RESTRICAO"].isin(restricoes)]
+    if pedidos_filtro: df = df[df["PEDIDO"].astype(str).isin([str(p) for p in pedidos_filtro])]
     return df
 
 
-def ordenar_prioridade(df, p_cliente, p_regiao, p_estado):
+def ordenar_prioridade(df, p_pedido, p_restricao, p_cliente, p_regiao, p_estado):
     """
-    P0 = Clientes prioritários   (máxima prioridade)
-    P1 = Regiões prioritárias
-    P2 = Estados prioritários
-    P3 = Demais
-    Dentro de cada prioridade: ordem por data de faturamento → número do pedido
+    P0 = Pedidos específicos (máxima prioridade)
+    P1 = Restrição prioritária (valor escolhido pelo usuário)
+    P2 = Clientes prioritários
+    P3 = Regiões prioritárias
+    P4 = Estados prioritários
+    P5 = Demais
     """
     df = df.copy()
 
-    pedidos_p0 = set(df[df["CLIENTE"].isin(p_cliente)]["PEDIDO"].unique()) if p_cliente else set()
+    pedidos_p0 = set([str(p) for p in p_pedido]) if p_pedido else set()
+    pedidos_p0 = set(df[df["PEDIDO"].astype(str).isin(pedidos_p0)]["PEDIDO"].unique())
 
     pedidos_p1 = set(
-        df[df["REGIÃO"].isin(p_regiao) & ~df["PEDIDO"].isin(pedidos_p0)]["PEDIDO"].unique()
-    ) if p_regiao else set()
+        df[df["RESTRICAO"].isin(p_restricao) &
+           ~df["PEDIDO"].isin(pedidos_p0)]["PEDIDO"].unique()
+    ) if p_restricao else set()
 
     pedidos_p2 = set(
-        df[
-            df["ESTADO"].isin(p_estado) &
-            ~df["PEDIDO"].isin(pedidos_p0) &
-            ~df["PEDIDO"].isin(pedidos_p1)
-        ]["PEDIDO"].unique()
+        df[df["CLIENTE"].isin(p_cliente) &
+           ~df["PEDIDO"].isin(pedidos_p0) &
+           ~df["PEDIDO"].isin(pedidos_p1)]["PEDIDO"].unique()
+    ) if p_cliente else set()
+
+    pedidos_p3 = set(
+        df[df["REGIÃO"].isin(p_regiao) &
+           ~df["PEDIDO"].isin(pedidos_p0) &
+           ~df["PEDIDO"].isin(pedidos_p1) &
+           ~df["PEDIDO"].isin(pedidos_p2)]["PEDIDO"].unique()
+    ) if p_regiao else set()
+
+    pedidos_p4 = set(
+        df[df["ESTADO"].isin(p_estado) &
+           ~df["PEDIDO"].isin(pedidos_p0) &
+           ~df["PEDIDO"].isin(pedidos_p1) &
+           ~df["PEDIDO"].isin(pedidos_p2) &
+           ~df["PEDIDO"].isin(pedidos_p3)]["PEDIDO"].unique()
     ) if p_estado else set()
 
-    df["ORDEM_PRIORIDADE"] = 3
+    df["ORDEM_PRIORIDADE"] = 5
     df.loc[df["PEDIDO"].isin(pedidos_p0), "ORDEM_PRIORIDADE"] = 0
     df.loc[df["PEDIDO"].isin(pedidos_p1), "ORDEM_PRIORIDADE"] = 1
     df.loc[df["PEDIDO"].isin(pedidos_p2), "ORDEM_PRIORIDADE"] = 2
+    df.loc[df["PEDIDO"].isin(pedidos_p3), "ORDEM_PRIORIDADE"] = 3
+    df.loc[df["PEDIDO"].isin(pedidos_p4), "ORDEM_PRIORIDADE"] = 4
 
     return df.sort_values(["ORDEM_PRIORIDADE", "FATURAR EM", "PEDIDO"], ascending=True)
 
@@ -450,6 +486,8 @@ def analisar_pedidos(df_ordem, estoque, tem_peso: bool):
             "CLIENTE":     info["CLIENTE"],
             "ESTADO":      info["ESTADO"],
             "REGIÃO":      info["REGIÃO"],
+            "RESTRICAO":   info.get("RESTRICAO", "NAO"),
+            "STATUS":      info.get("STATUS", "Nao informado"),
             "FATURAR EM":  info["FATURAR EM"].date() if pd.notnull(info["FATURAR EM"]) else None,
             "PRIORIDADE":  info["ORDEM_PRIORIDADE"],
             "PESO_TON":    peso_pedido,
@@ -486,8 +524,8 @@ def analisar_pedidos(df_ordem, estoque, tem_peso: bool):
 
 
 def calcular_resumo(df_lib, df_bloq, df_cons, df_falt):
-    total = len(df_lib) + len(df_bloq)
-    pct   = round(len(df_lib) / total * 100, 1) if total else 0
+    total    = len(df_lib) + len(df_bloq)
+    pct      = round(len(df_lib) / total * 100, 1) if total else 0
     ton_lib  = round(df_lib["PESO_TON"].sum(),  2) if not df_lib.empty  and "PESO_TON" in df_lib.columns  else 0
     ton_bloq = round(df_bloq["PESO_TON"].sum(), 2) if not df_bloq.empty and "PESO_TON" in df_bloq.columns else 0
     return pd.DataFrame([
@@ -495,37 +533,53 @@ def calcular_resumo(df_lib, df_bloq, df_cons, df_falt):
         {"METRICA": "Pedidos liberados",         "VALOR": len(df_lib)},
         {"METRICA": "Pedidos bloqueados",         "VALOR": len(df_bloq)},
         {"METRICA": "Taxa de liberacao (%)",      "VALOR": pct},
-        {"METRICA": "Toneladas liberadas",        "VALOR": ton_lib},
-        {"METRICA": "Toneladas retidas",          "VALOR": ton_bloq},
+        {"METRICA": "Toneladas liberadas (kg)",   "VALOR": ton_lib},
+        {"METRICA": "Toneladas retidas (kg)",     "VALOR": ton_bloq},
         {"METRICA": "Total itens consumidos",     "VALOR": int(df_cons["CONSUMO_TOTAL"].sum()) if not df_cons.empty else 0},
-        {"METRICA": "Total itens em falta",       "VALOR": int(df_falt["FALTA_TOTAL"].sum())   if not df_falt.empty else 0},
+        {"METRICA": "SKUs em falta",              "VALOR": len(df_falt)},
     ])
 
 
 def resumo_por_estado(df_lib, df_bloq):
-    """Agrupa pedidos e toneladas por estado."""
     rows = []
     estados = sorted(set(
-        (df_lib["ESTADO"].tolist() if not df_lib.empty else []) +
+        (df_lib["ESTADO"].tolist()  if not df_lib.empty  else []) +
         (df_bloq["ESTADO"].tolist() if not df_bloq.empty else [])
     ))
     for estado in estados:
-        lib_e  = df_lib[df_lib["ESTADO"]  == estado] if not df_lib.empty  else pd.DataFrame()
+        lib_e  = df_lib[df_lib["ESTADO"]   == estado] if not df_lib.empty  else pd.DataFrame()
         bloq_e = df_bloq[df_bloq["ESTADO"] == estado] if not df_bloq.empty else pd.DataFrame()
-        rows.append({
-            "ESTADO":             estado,
-            "PED_LIBERADOS":      len(lib_e),
-            "PED_BLOQUEADOS":     len(bloq_e),
-            "TON_LIBERADAS":      round(lib_e["PESO_TON"].sum(),  2) if not lib_e.empty  else 0,
-            "TON_RETIDAS":        round(bloq_e["PESO_TON"].sum(), 2) if not bloq_e.empty else 0,
-        })
-    df = pd.DataFrame(rows)
+        row = {
+            "ESTADO":         estado,
+            "PED_LIBERADOS":  len(lib_e),
+            "PED_BLOQUEADOS": len(bloq_e),
+            "TON_LIBERADAS":  round(lib_e["PESO_TON"].sum(),  2) if not lib_e.empty  else 0,
+            "TON_RETIDAS":    round(bloq_e["PESO_TON"].sum(), 2) if not bloq_e.empty else 0,
+        }
+        # Contagem dinâmica por valor de RESTRICAO nos liberados
+        if not lib_e.empty and "RESTRICAO" in lib_e.columns:
+            for val in lib_e["RESTRICAO"].dropna().unique():
+                row[f"REST_{val}"] = int((lib_e["RESTRICAO"] == val).sum())
+        rows.append(row)
+    df = pd.DataFrame(rows).fillna(0)
     if not df.empty:
         df["TOTAL_PEDIDOS"] = df["PED_LIBERADOS"] + df["PED_BLOQUEADOS"]
         df["TOTAL_TON"]     = df["TON_LIBERADAS"] + df["TON_RETIDAS"]
         df["TX_LIBERACAO"]  = (df["PED_LIBERADOS"] / df["TOTAL_PEDIDOS"] * 100).round(1)
         df = df.sort_values("TOTAL_TON", ascending=False)
     return df
+
+
+def resumo_por_status(df_lib):
+    """Conta pedidos liberados por status."""
+    if df_lib.empty or "STATUS" not in df_lib.columns:
+        return pd.DataFrame(columns=["STATUS", "PEDIDOS", "PESO_KG"])
+    grp = df_lib.groupby("STATUS").agg(
+        PEDIDOS=("PEDIDO", "count"),
+        PESO_KG=("PESO_TON", "sum")
+    ).reset_index().sort_values("PEDIDOS", ascending=False)
+    grp["PESO_KG"] = grp["PESO_KG"].round(2)
+    return grp
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -560,7 +614,6 @@ def _preencher(ws, r1, c1, r2, c2, fill):
 
 
 def _mesclar(ws, r, c1, c2, valor, font, fill=None, align=None):
-    # remove merges sobrepostos antes de criar novo
     to_remove = [
         mr for mr in list(ws.merged_cells.ranges)
         if mr.min_row <= r <= mr.max_row and mr.min_col <= c2 and mr.max_col >= c1
@@ -577,7 +630,7 @@ def _mesclar(ws, r, c1, c2, valor, font, fill=None, align=None):
             ws.cell(r, c).fill = fill
 
 
-def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, hoje):
+def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, df_status, hoje):
     from openpyxl.chart import BarChart, PieChart, Reference
     from openpyxl.chart.series import DataPoint
 
@@ -587,7 +640,7 @@ def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, h
 
     total    = len(df_lib) + len(df_bloq)
     pct_lib  = round(len(df_lib) / total * 100, 1) if total else 0
-    tot_falt = int(df_falt["FALTA_TOTAL"].sum()) if not df_falt.empty else 0
+    skus_falt = len(df_falt)
     ton_lib  = round(df_lib["PESO_TON"].sum(),  2) if not df_lib.empty  and "PESO_TON" in df_lib.columns  else 0
     ton_bloq = round(df_bloq["PESO_TON"].sum(), 2) if not df_bloq.empty and "PESO_TON" in df_bloq.columns else 0
 
@@ -596,35 +649,31 @@ def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, h
     f_cinza  = PatternFill("solid", fgColor="F4F6FA")
     f_branco = PatternFill("solid", fgColor="FFFFFF")
     f_sep    = PatternFill("solid", fgColor="E8ECF2")
-    f_verde  = PatternFill("solid", fgColor="D1E7DD")
-    f_verm   = PatternFill("solid", fgColor="F8D7DA")
 
     fn_titulo = Font(name="Calibri", bold=True, color="FFFFFF", size=13)
     fn_label  = Font(name="Calibri", bold=True, color="5A6A8A", size=8)
     fn_navy   = Font(name="Calibri", bold=True, color="0054A6", size=18)
     fn_verde  = Font(name="Calibri", bold=True, color="217A3C", size=18)
-    fn_verm   = Font(name="Calibri", bold=True, color="C0392B", size=18)
+    fn_azul   = Font(name="Calibri", bold=True, color="0054A6", size=18)
     fn_normal = Font(name="Calibri", size=10, color="1C2B4A")
     fn_hdr    = Font(name="Calibri", bold=True, color="FFFFFF", size=9)
     fn_azul_v = Font(name="Calibri", bold=True, color="0054A6", size=10)
-    fn_verm_v = Font(name="Calibri", bold=True, color="C0392B", size=10)
     fn_data   = Font(name="Calibri", color="FFFFFF", size=9)
 
     centro = Alignment(horizontal="center", vertical="center")
     esq    = Alignment(horizontal="left",   vertical="center")
     dir_   = Alignment(horizontal="right",  vertical="center")
 
-    # larguras
     for i, w in enumerate([1,14,2,14,2,14,2,14,2,14,2,14,1], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
-    # alturas
     for ln, h in {1:5, 2:26, 3:5, 4:12, 5:24, 6:12, 7:24, 8:5,
                   9:12, 10:16, 11:16, 12:16, 13:16, 14:16, 15:5,
-                  16:12, 17:16, 18:16, 19:16, 20:16, 21:16, 22:5}.items():
+                  16:12, 17:16, 18:16, 19:16, 20:16, 21:16, 22:5,
+                  23:5, 24:12, 25:16, 26:16, 27:16, 28:16, 29:16, 30:5}.items():
         ws.row_dimensions[ln].height = h
 
-    _preencher(ws, 1, 1, 70, 13, f_cinza)
+    _preencher(ws, 1, 1, 80, 13, f_cinza)
 
     # cabeçalho
     _preencher(ws, 2, 1, 2, 13, f_titulo)
@@ -640,196 +689,168 @@ def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, h
 
     _preencher(ws, 3, 1, 3, 13, f_navy)
 
-    # ── KPI linha 1: pedidos ──
+    # KPI linha 1 — pedidos
     _preencher(ws, 4, 1, 4, 13, f_branco)
     for col, lbl in [(2,"PEDIDOS ANALISADOS"),(4,"LIBERADOS"),(6,"BLOQUEADOS"),
-                     (8,"TAXA DE LIBERACAO"),(10,"ITENS EM FALTA")]:
+                     (8,"TAXA DE LIBERACAO"),(10,"SKUS EM FALTA")]:
         _mesclar(ws, 4, col, col+1, lbl, fn_label, f_branco, centro)
 
     _preencher(ws, 5, 1, 5, 13, f_branco)
     for col, val, fn in [
         (2,  total,           fn_navy),
         (4,  len(df_lib),     fn_verde),
-        (6,  len(df_bloq),    fn_verm),
+        (6,  len(df_bloq),    fn_azul),
         (8,  f"{pct_lib}%",   fn_navy),
-        (10, tot_falt,        fn_verm),
+        (10, skus_falt,       fn_azul),
     ]:
         _mesclar(ws, 5, col, col+1, val, fn, f_branco, centro)
 
-    # ── KPI linha 2: toneladas ──
+    # KPI linha 2 — toneladas
     _preencher(ws, 6, 1, 6, 13, f_branco)
-    for col, lbl in [(2,"TON LIBERADAS"),(6,"TON RETIDAS"),(10,"TOTAL TON")]:
+    for col, lbl in [(2,"PESO LIBERADO (KG)"),(6,"PESO RETIDO (KG)"),(10,"TOTAL (KG)")]:
         _mesclar(ws, 6, col, col+3, lbl, fn_label, f_branco, centro)
 
     _preencher(ws, 7, 1, 7, 13, f_branco)
     tot_ton = round(ton_lib + ton_bloq, 2)
 
     def _br(v):
-        """Formata número no padrão brasileiro: 1.234,56"""
         return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     for col, val, fn in [
         (2,  _br(ton_lib),  fn_verde),
-        (6,  _br(ton_bloq), fn_verm),
+        (6,  _br(ton_bloq), fn_azul),
         (10, _br(tot_ton),  fn_navy),
     ]:
         _mesclar(ws, 7, col, col+3, val, fn, f_branco, centro)
 
     _preencher(ws, 8, 1, 8, 13, f_sep)
 
-    # ── Top Faltas ──
-    _preencher(ws, 9, 2, 9, 6, f_navy)
-    _mesclar(ws, 9, 2, 6, "TOP ITENS EM FALTA", fn_hdr, f_navy, centro)
-    top_falt = df_falt.head(5).reset_index(drop=True)
-    for i in range(5):
-        r = 10 + i
-        _preencher(ws, r, 2, r, 6, f_branco)
-        item = top_falt.iloc[i]["ITEM"]        if i < len(top_falt) else ""
-        val  = top_falt.iloc[i]["FALTA_TOTAL"] if i < len(top_falt) else ""
-        _mesclar(ws, r, 2, 4, item, fn_normal, f_branco, esq)
-        c = ws.cell(r, 5)
-        c.value = int(val) if val != "" else ""
-        c.font  = fn_verm_v if val != "" else fn_normal
-        c.alignment = dir_
-        c.fill  = f_branco
-        ws.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+    # Tabela por estado
+    _preencher(ws, 9, 1, 9, 13, f_navy)
+    ws.row_dimensions[9].height = 13
+    _mesclar(ws, 9, 2, 12, "PEDIDOS POR ESTADO", fn_hdr, f_navy, centro)
 
-    # ── Top Consumo ──
-    _preencher(ws, 9, 8, 9, 12, f_navy)
-    _mesclar(ws, 9, 8, 12, "TOP ITENS POR CONSUMO", fn_hdr, f_navy, centro)
-    top_cons = df_cons.head(5).reset_index(drop=True)
-    for i in range(5):
-        r = 10 + i
-        _preencher(ws, r, 8, r, 12, f_branco)
-        item = top_cons.iloc[i]["ITEM"]          if i < len(top_cons) else ""
-        val  = top_cons.iloc[i]["CONSUMO_TOTAL"] if i < len(top_cons) else ""
-        _mesclar(ws, r, 8, 10, item, fn_normal, f_branco, esq)
-        c = ws.cell(r, 11)
-        c.value = int(val) if val != "" else ""
-        c.font  = fn_azul_v if val != "" else fn_normal
-        c.alignment = dir_
-        c.fill  = f_branco
-        ws.merge_cells(start_row=r, start_column=11, end_row=r, end_column=12)
-
-    # ── Separador + Título tabela estados (linha 15 = título, linha 16 = headers) ──
-    _preencher(ws, 15, 1, 15, 13, f_navy)
-    ws.row_dimensions[15].height = 13
-    _mesclar(ws, 15, 2, 12, "TONELADAS E PEDIDOS POR ESTADO", fn_hdr, f_navy, centro)
-
-    # headers na linha 16 — SEM mesclar, escrita célula a célula
-    _preencher(ws, 16, 1, 16, 13, f_navy)
-    ws.row_dimensions[16].height = 13
-    headers = [
-        (2,  "ESTADO"),
-        (4,  "PED LIB"),
-        (6,  "PED BLOQ"),
-        (7,  "TON LIB"),
-        (9,  "TON RETIDAS"),
-        (11, "TX LIB%"),
-    ]
-    for col, lbl in headers:
-        c = ws.cell(16, col)
+    _preencher(ws, 10, 1, 10, 13, f_navy)
+    ws.row_dimensions[10].height = 13
+    for col, lbl in [(2,"ESTADO"),(4,"LIB"),(5,"BLOQ"),(6,"TON LIB"),(8,"TON RETIDA"),(10,"COM REST."),(11,"SEM REST."),(12,"TX%")]:
+        c = ws.cell(10, col)
         c.value = lbl
         c.font  = fn_hdr
         c.alignment = centro
         c.fill  = f_navy
 
-    top_est_tab = df_estado.head(6).reset_index(drop=True) if not df_estado.empty else pd.DataFrame()
+    top_est = df_estado.head(6).reset_index(drop=True) if not df_estado.empty else pd.DataFrame()
     for i in range(6):
-        r = 17 + i
+        r = 11 + i
         ws.row_dimensions[r].height = 15
-        fill_linha = f_branco if i % 2 == 0 else PatternFill("solid", fgColor="F4F6FA")
-        _preencher(ws, r, 2, r, 12, fill_linha)
-        if i < len(top_est_tab):
-            row_d = top_est_tab.iloc[i]
-
-            def _br_ton(v):
-                return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
+        fl = f_branco if i % 2 == 0 else PatternFill("solid", fgColor="F4F6FA")
+        _preencher(ws, r, 2, r, 12, fl)
+        if i < len(top_est):
+            row_d = top_est.iloc[i]
             dados = [
-                (2,  row_d["ESTADO"],                    fn_normal, esq),
-                (4,  int(row_d["PED_LIBERADOS"]),         fn_verde,  centro),
-                (6,  int(row_d["PED_BLOQUEADOS"]),        fn_verm,   centro),
-                (7,  _br_ton(row_d["TON_LIBERADAS"]),     fn_verde,  dir_),
-                (9,  _br_ton(row_d["TON_RETIDAS"]),       fn_verm,   dir_),
-                (11, f"{row_d['TX_LIBERACAO']}%",          fn_navy,   centro),
+                (2,  row_d["ESTADO"],                   fn_normal, esq),
+                (4,  int(row_d["PED_LIBERADOS"]),        fn_verde,  centro),
+                (5,  int(row_d["PED_BLOQUEADOS"]),       fn_azul_v, centro),
+                (6,  _br(row_d["TON_LIBERADAS"]),        fn_verde,  dir_),
+                (8,  _br(row_d["TON_RETIDAS"]),          fn_azul_v, dir_),
+                (10, int(row_d.get("COM_RESTRICAO", 0)), fn_azul_v, centro),
+                (11, int(row_d.get("SEM_RESTRICAO", 0)), fn_verde,  centro),
+                (12, f"{row_d['TX_LIBERACAO']}%",         fn_navy,   centro),
             ]
             for col, val, fn, aln in dados:
                 c = ws.cell(r, col)
-                c.value = val
-                c.font  = fn
-                c.alignment = aln
-                c.fill  = fill_linha
+                c.value = val; c.font = fn; c.alignment = aln; c.fill = fl
 
-    _preencher(ws, 23, 1, 23, 13, f_sep)
+    _preencher(ws, 17, 1, 17, 13, f_sep)
 
-    # ── Gráficos ──
-    ws.row_dimensions[24].height = 12
-    _preencher(ws, 24, 2, 24, 12, f_navy)
-    _mesclar(ws, 24, 2, 12, "GRAFICOS GERENCIAIS", fn_hdr, f_navy, centro)
+    # Tabela por status
+    _preencher(ws, 18, 1, 18, 13, f_navy)
+    ws.row_dimensions[18].height = 13
+    _mesclar(ws, 18, 2, 12, "PEDIDOS LIBERADOS POR STATUS", fn_hdr, f_navy, centro)
 
-    # dados auxiliares ocultos
-    ws.cell(60, 1).value = "Liberados"
-    ws.cell(61, 1).value = "Bloqueados"
-    ws.cell(60, 2).value = len(df_lib)
-    ws.cell(61, 2).value = len(df_bloq)
+    _preencher(ws, 19, 1, 19, 13, f_navy)
+    ws.row_dimensions[19].height = 13
+    for col, lbl in [(2,"STATUS"),(8,"PEDIDOS"),(10,"PESO KG"),(12,"")]:
+        c = ws.cell(19, col)
+        c.value = lbl; c.font = fn_hdr; c.alignment = centro; c.fill = f_navy
+
+    top_status = df_status.head(8).reset_index(drop=True) if not df_status.empty else pd.DataFrame()
+    for i in range(8):
+        r = 20 + i
+        ws.row_dimensions[r].height = 15
+        fl = f_branco if i % 2 == 0 else PatternFill("solid", fgColor="F4F6FA")
+        _preencher(ws, r, 2, r, 12, fl)
+        if i < len(top_status):
+            row_d = top_status.iloc[i]
+            _mesclar(ws, r, 2, 7, str(row_d["STATUS"]), fn_normal, fl, esq)
+            c = ws.cell(r, 8)
+            c.value = int(row_d["PEDIDOS"]); c.font = fn_azul_v; c.alignment = centro; c.fill = fl
+            ws.merge_cells(start_row=r, start_column=8, end_row=r, end_column=9)
+            c2 = ws.cell(r, 10)
+            c2.value = _br(row_d["PESO_KG"]); c2.font = fn_verde; c2.alignment = dir_; c2.fill = fl
+            ws.merge_cells(start_row=r, start_column=10, end_row=r, end_column=12)
+
+    _preencher(ws, 28, 1, 28, 13, f_sep)
+
+    # Gráficos
+    ws.row_dimensions[29].height = 12
+    _preencher(ws, 29, 2, 29, 12, f_navy)
+    _mesclar(ws, 29, 2, 12, "GRAFICOS GERENCIAIS", fn_hdr, f_navy, centro)
+
+    ws.cell(65, 1).value = "Liberados"
+    ws.cell(66, 1).value = "Bloqueados"
+    ws.cell(65, 2).value = len(df_lib)
+    ws.cell(66, 2).value = len(df_bloq)
 
     pizza = PieChart()
-    pizza.title  = "Liberados vs Bloqueados"
-    pizza.style  = 10
-    pizza.width  = 10
-    pizza.height = 7
-    pizza.add_data(Reference(ws, min_col=2, min_row=60, max_row=61))
-    pizza.set_categories(Reference(ws, min_col=1, min_row=60, max_row=61))
+    pizza.title = "Liberados vs Bloqueados"
+    pizza.style = 10; pizza.width = 10; pizza.height = 7
+    pizza.add_data(Reference(ws, min_col=2, min_row=65, max_row=66))
+    pizza.set_categories(Reference(ws, min_col=1, min_row=65, max_row=66))
     dp0 = DataPoint(idx=0); dp0.graphicalProperties.solidFill = "0054A6"
-    dp1 = DataPoint(idx=1); dp1.graphicalProperties.solidFill = "E8ECF2"
+    dp1 = DataPoint(idx=1); dp1.graphicalProperties.solidFill = "C5D3E8"
     pizza.series[0].dPt = [dp0, dp1]
-    ws.add_chart(pizza, "B25")
+    ws.add_chart(pizza, "B30")
 
-    # barras toneladas por estado
     if not df_estado.empty:
         est_top = df_estado.head(8)
-        ws.cell(60, 4).value = "Estado"
-        ws.cell(60, 5).value = "Ton Liberadas"
-        ws.cell(60, 6).value = "Ton Retidas"
+        ws.cell(65, 4).value = "Estado"
+        ws.cell(65, 5).value = "Ton Liberadas"
+        ws.cell(65, 6).value = "Ton Retidas"
         for i, row_d in enumerate(est_top.itertuples()):
-            ws.cell(61 + i, 4).value = row_d.ESTADO
-            ws.cell(61 + i, 5).value = float(row_d.TON_LIBERADAS)
-            ws.cell(61 + i, 6).value = float(row_d.TON_RETIDAS)
-
+            ws.cell(66+i, 4).value = row_d.ESTADO
+            ws.cell(66+i, 5).value = float(row_d.TON_LIBERADAS)
+            ws.cell(66+i, 6).value = float(row_d.TON_RETIDAS)
         n = len(est_top)
         barras = BarChart()
-        barras.type     = "col"
-        barras.title    = "Toneladas por Estado"
-        barras.style    = 10
-        barras.width    = 14
-        barras.height   = 7
-        barras.grouping = "clustered"
-        barras.add_data(Reference(ws, min_col=5, min_row=60, max_row=60+n), titles_from_data=True)
-        barras.add_data(Reference(ws, min_col=6, min_row=60, max_row=60+n), titles_from_data=True)
-        barras.set_categories(Reference(ws, min_col=4, min_row=61, max_row=60+n))
+        barras.type = "col"; barras.title = "Peso por Estado"
+        barras.style = 10; barras.width = 14; barras.height = 7; barras.grouping = "clustered"
+        barras.add_data(Reference(ws, min_col=5, min_row=65, max_row=65+n), titles_from_data=True)
+        barras.add_data(Reference(ws, min_col=6, min_row=65, max_row=65+n), titles_from_data=True)
+        barras.set_categories(Reference(ws, min_col=4, min_row=66, max_row=65+n))
         barras.series[0].graphicalProperties.solidFill = "0054A6"
-        barras.series[1].graphicalProperties.solidFill = "F8D7DA"
-        ws.add_chart(barras, "G25")
+        barras.series[1].graphicalProperties.solidFill = "C5D3E8"
+        ws.add_chart(barras, "G30")
 
-    for r in range(60, 80):
+    for r in range(65, 85):
         ws.row_dimensions[r].hidden = True
 
     ws.freeze_panes = "A3"
     ws.sheet_view.showGridLines = False
 
 
-def gerar_excel(df_lib, df_bloq, df_cons, df_falt, df_est, df_resumo, df_estado) -> bytes:
+def gerar_excel(df_lib, df_bloq, df_cons, df_falt, df_est, df_resumo, df_estado, df_status) -> bytes:
     from openpyxl import load_workbook
 
     output = BytesIO()
     SHEETS = {
         "RESUMO":        (df_resumo,  "0054A6"),
         "LIBERADOS":     (df_lib,     "217A3C"),
-        "NAO_LIBERADOS": (df_bloq,    "C0392B"),
+        "NAO_LIBERADOS": (df_bloq,    "0054A6"),
         "POR_ESTADO":    (df_estado,  "0054A6"),
+        "POR_STATUS":    (df_status,  "0054A6"),
         "CONSUMO_ITEM":  (df_cons,    "0054A6"),
-        "FALTAS_ITEM":   (df_falt,    "C0392B"),
+        "FALTAS_ITEM":   (df_falt,    "0054A6"),
         "ESTOQUE_FINAL": (df_est,     "217A3C"),
     }
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -839,7 +860,7 @@ def gerar_excel(df_lib, df_bloq, df_cons, df_falt, df_est, df_resumo, df_estado)
 
     output.seek(0)
     wb = load_workbook(output)
-    _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, date.today())
+    _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, df_status, date.today())
 
     if "VISAO_GERENCIAL" in wb.sheetnames:
         idx = wb.sheetnames.index("VISAO_GERENCIAL")
@@ -868,7 +889,7 @@ def fig_donut(liberados, bloqueados):
         labels=["Liberados", "Bloqueados"],
         values=[liberados, bloqueados],
         hole=0.72,
-        marker=dict(colors=[C_BLUE, "#E4EAF5"], line=dict(color="#FFFFFF", width=2)),
+        marker=dict(colors=[C_BLUE, "#C5D3E8"], line=dict(color="#FFFFFF", width=2)),
         textinfo="none",
         hovertemplate="%{label}: %{value} (%{percent})<extra></extra>",
     ))
@@ -888,22 +909,22 @@ def fig_ton_estado(df_estado):
     df_p = df_estado.head(10).sort_values("TON_LIBERADAS", ascending=True)
     fig  = go.Figure()
     fig.add_trace(go.Bar(
-        name="Ton Liberadas", y=df_p["ESTADO"], x=df_p["TON_LIBERADAS"],
+        name="Liberadas", y=df_p["ESTADO"], x=df_p["TON_LIBERADAS"],
         orientation="h", marker_color=C_BLUE,
-        text=df_p["TON_LIBERADAS"].apply(lambda v: f"{v:,.1f}"),
+        text=df_p["TON_LIBERADAS"].apply(lambda v: fmt_peso(v)),
         textposition="outside", textfont=dict(size=10, color=C_TEXT),
     ))
     fig.add_trace(go.Bar(
-        name="Ton Retidas", y=df_p["ESTADO"], x=df_p["TON_RETIDAS"],
-        orientation="h", marker_color="#F8D7DA",
-        text=df_p["TON_RETIDAS"].apply(lambda v: f"{v:,.1f}"),
-        textposition="outside", textfont=dict(size=10, color=C_RED),
+        name="Retidas", y=df_p["ESTADO"], x=df_p["TON_RETIDAS"],
+        orientation="h", marker_color="#C5D3E8",
+        text=df_p["TON_RETIDAS"].apply(lambda v: fmt_peso(v)),
+        textposition="outside", textfont=dict(size=10, color=C_MUTED),
     ))
     fig.update_layout(
         **_L, barmode="group", height=max(200, len(df_p) * 38),
-        margin=dict(t=6, b=6, l=6, r=60),
+        margin=dict(t=6, b=6, l=6, r=80),
         xaxis=dict(showgrid=True, gridcolor="#F0F3F8", zeroline=False,
-                   tickfont=dict(size=10, color=C_MUTED), title="Toneladas"),
+                   tickfont=dict(size=10, color=C_MUTED), title="Peso (kg)"),
         yaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_TEXT)),
         legend=dict(orientation="h", x=1, xanchor="right", y=1.1,
                     font=dict(size=11, color=C_MUTED), bgcolor="rgba(0,0,0,0)"),
@@ -938,38 +959,58 @@ def fig_ped_estado(df_estado):
     return fig
 
 
-def fig_barras_h(df, col_label, col_valor, cor, n=10):
-    df_p = df.nlargest(n, col_valor).sort_values(col_valor, ascending=True)
-    fig  = go.Figure(go.Bar(
-        y=df_p[col_label].astype(str), x=df_p[col_valor],
-        orientation="h", marker_color=cor, marker_line=dict(width=0),
-        text=df_p[col_valor].apply(lambda v: f"{int(v):,}"),
-        textposition="outside", textfont=dict(size=11, color=C_TEXT),
-        hovertemplate="%{y}: %{x:,}<extra></extra>",
-    ))
+def fig_restricao_estado(df_estado):
+    """Gráfico dinâmico: lê todos os valores de RESTRICAO existentes na base."""
+    # Colunas REST_* geradas dinamicamente
+    rest_cols = [c for c in df_estado.columns if c.startswith("REST_")]
+    if not rest_cols:
+        return go.Figure()
+
+    df_p = df_estado.head(10).copy()
+    df_p = df_p.sort_values(rest_cols[0], ascending=True)
+
+    # Paleta de cores cíclica para quantos valores houver
+    paleta = [C_BLUE, C_AMBER, C_GREEN, "#8B5CF6", "#0891B2", "#DB2777", "#D97706"]
+
+    fig = go.Figure()
+    for i, col in enumerate(rest_cols):
+        label = col.replace("REST_", "")
+        cor   = paleta[i % len(paleta)]
+        fig.add_trace(go.Bar(
+            name=label,
+            y=df_p["ESTADO"],
+            x=df_p[col],
+            orientation="h",
+            marker_color=cor,
+            text=df_p[col].astype(int),
+            textposition="outside",
+            textfont=dict(size=10, color=C_TEXT),
+        ))
+
     fig.update_layout(
-        **_L, height=max(190, len(df_p) * 32),
-        margin=dict(t=6, b=6, l=6, r=56),
+        **_L, barmode="group", height=max(200, len(df_p) * 38),
+        margin=dict(t=6, b=6, l=6, r=60),
         xaxis=dict(showgrid=True, gridcolor="#F0F3F8", zeroline=False,
                    tickfont=dict(size=10, color=C_MUTED)),
         yaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_TEXT)),
+        legend=dict(orientation="h", x=1, xanchor="right", y=1.1,
+                    font=dict(size=11, color=C_MUTED), bgcolor="rgba(0,0,0,0)"),
     )
     return fig
 
 
-def fig_estoque(df_est, n=12):
-    df_p  = df_est.nlargest(n, "ESTOQUE_FINAL").sort_values("ESTOQUE_FINAL", ascending=True)
-    cores = [C_RED if v == 0 else C_AMBER if v < 20 else C_BLUE for v in df_p["ESTOQUE_FINAL"]]
-    fig   = go.Figure(go.Bar(
-        y=df_p["ITEM"].astype(str), x=df_p["ESTOQUE_FINAL"],
-        orientation="h", marker_color=cores, marker_line=dict(width=0),
-        text=df_p["ESTOQUE_FINAL"].apply(lambda v: f"{int(v):,}"),
-        textposition="outside", textfont=dict(size=11, color=C_TEXT),
-        hovertemplate="%{y}: %{x:,}<extra></extra>",
+def fig_status(df_status):
+    df_p = df_status.sort_values("PEDIDOS", ascending=True)
+    fig  = go.Figure(go.Bar(
+        y=df_p["STATUS"].astype(str), x=df_p["PEDIDOS"],
+        orientation="h", marker_color=C_BLUE, marker_line=dict(width=0),
+        text=df_p["PEDIDOS"], textposition="outside",
+        textfont=dict(size=11, color=C_TEXT),
+        hovertemplate="%{y}: %{x}<extra></extra>",
     ))
     fig.update_layout(
-        **_L, height=max(190, len(df_p) * 32),
-        margin=dict(t=6, b=6, l=6, r=56),
+        **_L, height=max(200, len(df_p) * 36),
+        margin=dict(t=6, b=6, l=6, r=60),
         xaxis=dict(showgrid=True, gridcolor="#F0F3F8", zeroline=False,
                    tickfont=dict(size=10, color=C_MUTED)),
         yaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_TEXT)),
@@ -988,7 +1029,8 @@ with st.sidebar:
         <div class="sb-brand-icon">LP</div>
         <div>
             <div class="sb-brand-name">Liberacao de Pedidos</div>
-                <div class="sb-brand-sub">Versao {VERSION}</div>
+            <div class="sb-brand-sub">Versao {VERSION}</div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1005,7 +1047,13 @@ with st.sidebar:
         data_inicio = st.date_input("Inicio", value=date.today(), format="DD/MM/YYYY")
         data_fim    = st.date_input("Fim",    value=date.today(), format="DD/MM/YYYY")
 
-    opcoes_regiao = opcoes_estado = opcoes_cliente = []
+    # Opções dinâmicas
+    opcoes_regiao   = []
+    opcoes_estado   = []
+    opcoes_cliente  = []
+    opcoes_restricao = []
+    opcoes_status   = []
+    opcoes_pedidos  = []
     df_global = None
     tem_peso  = False
 
@@ -1013,26 +1061,34 @@ with st.sidebar:
         try:
             df_tmp = preparar_base(pd.read_excel(arquivo))
             if not validar_colunas(df_tmp):
-                df_global      = df_tmp
-                opcoes_regiao  = sorted(df_tmp["REGIÃO"].dropna().unique())
-                opcoes_estado  = sorted(df_tmp["ESTADO"].dropna().unique())
-                opcoes_cliente = sorted(df_tmp["CLIENTE"].dropna().unique())
-                tem_peso       = "PESO" in df_tmp.columns
+                df_global        = df_tmp
+                opcoes_regiao    = sorted(df_tmp["REGIÃO"].dropna().unique())
+                opcoes_estado    = sorted(df_tmp["ESTADO"].dropna().unique())
+                opcoes_cliente   = sorted(df_tmp["CLIENTE"].dropna().unique())
+                opcoes_restricao = sorted(df_tmp["RESTRICAO"].dropna().unique())
+                opcoes_status    = sorted(df_tmp["STATUS"].dropna().unique())
+                opcoes_pedidos   = sorted(df_tmp["PEDIDO"].dropna().astype(str).unique())
+                tem_peso         = "PESO" in df_tmp.columns
         except Exception:
             pass
 
-    # ── Prioridades — P0 Cliente (novo), P1 Região, P2 Estado ──
+    # ── Prioridade ──
     st.markdown('<div class="sb-section">Prioridade de Liberacao</div>', unsafe_allow_html=True)
-    st.caption("P0 = clientes  ·  P1 = regioes  ·  P2 = estados  ·  P3 = demais")
+    st.caption("P0 = pedidos  ·  P1 = restricao  ·  P2 = clientes  ·  P3 = regioes  ·  P4 = estados  ·  P5 = demais")
 
-    p_cliente = st.multiselect("Clientes prioritarios (P0)", opcoes_cliente, placeholder="Nenhum")
-    p_regiao  = st.multiselect("Regioes prioritarias (P1)",  opcoes_regiao,  placeholder="Nenhuma")
-    p_estado  = st.multiselect("Estados prioritarios (P2)",  opcoes_estado,  placeholder="Nenhum")
+    p_pedido   = st.multiselect("Pedidos prioritarios (P0)",   opcoes_pedidos,   placeholder="Nenhum")
+    p_restricao = st.multiselect("Restricao prioritaria (P1)",  opcoes_restricao, placeholder="Nenhuma")
+    p_cliente  = st.multiselect("Clientes prioritarios (P2)",  opcoes_cliente,   placeholder="Nenhum")
+    p_regiao   = st.multiselect("Regioes prioritarias (P3)",   opcoes_regiao,    placeholder="Nenhuma")
+    p_estado   = st.multiselect("Estados prioritarios (P4)",   opcoes_estado,    placeholder="Nenhum")
 
+    # ── Filtros ──
     st.markdown('<div class="sb-section">Filtros Operacionais</div>', unsafe_allow_html=True)
-    f_regiao  = st.multiselect("Regiao",  opcoes_regiao,  placeholder="Todas")
-    f_estado  = st.multiselect("Estado",  opcoes_estado,  placeholder="Todos")
-    f_cliente = st.multiselect("Cliente", opcoes_cliente, placeholder="Todos")
+    f_pedido   = st.multiselect("Pedido",    opcoes_pedidos,   placeholder="Todos")
+    f_regiao   = st.multiselect("Regiao",    opcoes_regiao,    placeholder="Todas")
+    f_estado   = st.multiselect("Estado",    opcoes_estado,    placeholder="Todos")
+    f_cliente  = st.multiselect("Cliente",   opcoes_cliente,   placeholder="Todos")
+    f_restricao = st.multiselect("Restricao", opcoes_restricao, placeholder="Todas")
 
     st.markdown("---")
     rodar = st.button("Gerar Analise", use_container_width=True)
@@ -1080,11 +1136,11 @@ if df_global is None:
 df = df_global
 
 if not tem_peso:
-    st.warning("Coluna PESO nao encontrada na planilha. Toneladas serao exibidas como zero.")
+    st.warning("Coluna PESO nao encontrada. Peso sera exibido como zero.")
 
 with st.expander("Visualizar base carregada", expanded=False):
     st.dataframe(df.head(100), use_container_width=True, hide_index=True)
-    peso_info = f"  ·  coluna PESO detectada" if tem_peso else "  ·  sem coluna PESO"
+    peso_info = "  ·  coluna PESO detectada" if tem_peso else "  ·  sem coluna PESO"
     st.caption(
         f"{len(df):,} linhas  ·  {df['PEDIDO'].nunique():,} pedidos  "
         f"·  {df['ITEM'].nunique():,} itens  ·  {df['CLIENTE'].nunique():,} clientes{peso_info}"
@@ -1112,16 +1168,17 @@ with st.spinner("Processando analise..."):
         st.warning("Nenhum pedido no periodo selecionado.")
         st.stop()
 
-    df_f = aplicar_filtros(df_f, f_regiao, f_estado, f_cliente)
+    df_f = aplicar_filtros(df_f, f_regiao, f_estado, f_cliente, f_restricao, f_pedido)
     if df_f.empty:
         st.warning("Nenhum pedido com os filtros aplicados.")
         st.stop()
 
     estoque   = montar_estoque(df)
-    df_ordem  = ordenar_prioridade(df_f, p_cliente, p_regiao, p_estado)
+    df_ordem  = ordenar_prioridade(df_f, p_pedido, p_restricao, p_cliente, p_regiao, p_estado)
     df_lib, df_bloq, df_cons, df_falt, df_est = analisar_pedidos(df_ordem, estoque, tem_peso)
     df_resumo = calcular_resumo(df_lib, df_bloq, df_cons, df_falt)
     df_estado = resumo_por_estado(df_lib, df_bloq)
+    df_status = resumo_por_status(df_lib)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1135,18 +1192,15 @@ ton_bloq = round(df_bloq["PESO_TON"].sum(), 2) if not df_bloq.empty else 0
 
 st.markdown('<div class="kpi-panel"><div class="kpi-panel-title">Resultado Geral da Simulacao</div>', unsafe_allow_html=True)
 
-# linha 1 — pedidos
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Analisados",      f"{total:,}")
-c2.metric("Liberados",       f"{len(df_lib):,}")
-c3.metric("Bloqueados",      f"{len(df_bloq):,}")
-c4.metric("Taxa Liberacao",  f"{pct:.1f}%")
-c5.metric("SKUs em Falta",   f"{len(df_falt):,}")
+c1.metric("Analisados",     f"{total:,}")
+c2.metric("Liberados",      f"{len(df_lib):,}")
+c3.metric("Bloqueados",     f"{len(df_bloq):,}")
+c4.metric("Taxa Liberacao", f"{pct:.1f}%")
+c5.metric("SKUs em Falta",  f"{len(df_falt):,}")
 
-st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-
-# linha 2 — toneladas
 if tem_peso:
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
     t1, t2, t3 = st.columns(3)
     t1.metric("Peso Liberado",   fmt_peso(ton_lib))
     t2.metric("Peso Retido",     fmt_peso(ton_bloq))
@@ -1160,8 +1214,9 @@ st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 # ABAS
 # ──────────────────────────────────────────────────────────────────────────────
 
-tab_dash, tab_estado, tab_lib, tab_bloq, tab_falt, tab_cons, tab_est = st.tabs([
+tab_dash, tab_status, tab_estado, tab_lib, tab_bloq, tab_falt, tab_cons, tab_est = st.tabs([
     "Visao Gerencial",
+    "Por Status",
     "Por Estado",
     "Liberados",
     "Nao Liberados",
@@ -1189,14 +1244,40 @@ with tab_dash:
                             use_container_width=True, config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
 
-    if tem_peso:
-        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-        st.markdown('<div class="g-card"><div class="g-label">Toneladas por Estado — Liberadas vs Retidas</div>', unsafe_allow_html=True)
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+
+    col_c, col_d = st.columns(2)
+    with col_c:
+        st.markdown('<div class="g-card"><div class="g-label">Restricao por Estado (Liberados)</div>', unsafe_allow_html=True)
         if not df_estado.empty:
-            st.plotly_chart(fig_ton_estado(df_estado),
+            st.plotly_chart(fig_restricao_estado(df_estado),
                             use_container_width=True, config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
 
+    with col_d:
+        st.markdown('<div class="g-card"><div class="g-label">Pedidos Liberados por Status</div>', unsafe_allow_html=True)
+        if not df_status.empty:
+            st.plotly_chart(fig_status(df_status),
+                            use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.caption("Sem dados de status.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if tem_peso and not df_estado.empty:
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+        st.markdown('<div class="g-card"><div class="g-label">Peso por Estado — Liberado vs Retido</div>', unsafe_allow_html=True)
+        st.plotly_chart(fig_ton_estado(df_estado),
+                        use_container_width=True, config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ── POR STATUS ───────────────────────────────────────────────────────────────
+with tab_status:
+    if df_status.empty:
+        st.info("Sem dados de status.")
+    else:
+        st.caption(f"{len(df_status):,} status distintos nos pedidos liberados")
+        st.dataframe(df_status, use_container_width=True, hide_index=True)
 
 
 # ── POR ESTADO ───────────────────────────────────────────────────────────────
@@ -1213,8 +1294,7 @@ with tab_lib:
     if df_lib.empty:
         st.warning("Nenhum pedido foi liberado.")
     else:
-        st.caption(f"{len(df_lib):,} pedidos liberados  ·  {str(round(ton_lib,2)).replace('.',',')} ton")
-        # badge de prioridade
+        st.caption(f"{len(df_lib):,} pedidos liberados  ·  {fmt_peso(ton_lib)}")
         st.dataframe(df_lib, use_container_width=True, hide_index=True)
 
 
@@ -1223,7 +1303,7 @@ with tab_bloq:
     if df_bloq.empty:
         st.success("Todos os pedidos foram liberados.")
     else:
-        st.caption(f"{len(df_bloq):,} pedidos bloqueados  ·  {str(round(ton_bloq,2)).replace('.',',')} ton retidas")
+        st.caption(f"{len(df_bloq):,} pedidos bloqueados  ·  {fmt_peso(ton_bloq)} retidos")
         st.dataframe(df_bloq, use_container_width=True, hide_index=True)
 
 
@@ -1232,7 +1312,7 @@ with tab_falt:
     if df_falt.empty:
         st.success("Nenhum item em falta.")
     else:
-        st.caption(f"{len(df_falt):,} itens com falta registrada")
+        st.caption(f"{len(df_falt):,} SKUs com falta registrada")
         st.dataframe(df_falt, use_container_width=True, hide_index=True)
 
 
@@ -1258,7 +1338,7 @@ with tab_est:
 st.markdown("---")
 col_dl, col_txt = st.columns([1, 3])
 with col_dl:
-    excel_bytes = gerar_excel(df_lib, df_bloq, df_cons, df_falt, df_est, df_resumo, df_estado)
+    excel_bytes = gerar_excel(df_lib, df_bloq, df_cons, df_falt, df_est, df_resumo, df_estado, df_status)
     st.download_button(
         label="Baixar Relatorio Excel",
         data=excel_bytes,
@@ -1268,6 +1348,6 @@ with col_dl:
     )
 with col_txt:
     st.caption(
-        f"8 abas: Visao Gerencial · Resumo · Liberados · Nao Liberados · Por Estado · Consumo · Faltas · Estoque Final"
+        f"8 abas: Visao Gerencial · Resumo · Liberados · Nao Liberados · Por Estado · Por Status · Consumo · Faltas · Estoque Final"
         f"  ·  Gerado em {date.today().strftime('%d/%m/%Y')}"
     )
