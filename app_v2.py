@@ -999,11 +999,11 @@ with st.sidebar:
     st.markdown('<div class="sb-section">Periodo de Analise</div>', unsafe_allow_html=True)
     tipo_data = st.radio("Tipo", ["Data especifica", "Periodo"], label_visibility="collapsed")
     if tipo_data == "Data especifica":
-        data_ref    = st.date_input("Data", value=date.today(), label_visibility="collapsed")
+        data_ref    = st.date_input("Data", value=date.today(), format="DD/MM/YYYY", label_visibility="collapsed")
         data_inicio = data_fim = data_ref
     else:
-        data_inicio = st.date_input("Inicio", value=date.today())
-        data_fim    = st.date_input("Fim",    value=date.today())
+        data_inicio = st.date_input("Inicio", value=date.today(), format="DD/MM/YYYY")
+        data_fim    = st.date_input("Fim",    value=date.today(), format="DD/MM/YYYY")
 
     opcoes_regiao = opcoes_estado = opcoes_cliente = []
     df_global = None
