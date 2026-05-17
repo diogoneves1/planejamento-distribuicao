@@ -10,12 +10,12 @@ from openpyxl.utils import get_column_letter
 # CONFIGURAÇÃO
 # ──────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Liberacao de Pedidos v3.1",
+    page_title="Liberacao de Pedidos v3.2",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-VERSION = "3.1"
+VERSION = "3.2"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ESTILOS
@@ -544,6 +544,7 @@ def resumo_por_status(df_lib):
 def gerar_analise_itens(df_bloq: pd.DataFrame):
     """
     Analisa pedidos bloqueados: quantos seriam liberados repondo 1, 2 ou 3 itens.
+    v3.2: inclui QTD NECESSARIA por item no detalhe e QTD TOTAL por item no ranking.
     Retorna (df_ranking, df_detalhe, df_resumo) ou (None, None, None).
     """
     from itertools import combinations
@@ -559,18 +560,25 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
         except:
             return str(v).strip()
 
-    pedido_itens = {}
+    # ── MUDANÇA 1: adicionar pedido_qtds para armazenar QTD_NECESSARIA por item ──
+    pedido_itens = {}   # pedido → set de itens em falta
+    pedido_qtds  = {}   # pedido → {item: qtd_necessaria}
     pedido_info  = {}
+
     for _, row in df_bloq.iterrows():
         pedido = row["PEDIDO"]
         itens_falta = set()
+        qtds_falta  = {}
         for i in range(1, 15):
             item  = norm_item(row.get(f"ITEM_{i}"))
             falta = row.get(f"FALTA_{i}", 0)
+            qtd   = row.get(f"QTD_NECESSARIA_{i}", falta)  # usa QTD_NECESSARIA se existir
             if item and pd.notna(falta) and float(falta) > 0:
                 itens_falta.add(item)
+                qtds_falta[item] = float(qtd) if pd.notna(qtd) else float(falta)
         if itens_falta:
             pedido_itens[pedido] = itens_falta
+            pedido_qtds[pedido]  = qtds_falta
             pedido_info[pedido]  = {
                 "ESTADO":    row.get("ESTADO", ""),
                 "REGIAO":    row.get("REGIÃO", ""),
@@ -591,65 +599,132 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
     todos_itens = list(item_pedidos.keys())
     rows_det = []
 
+    # ── MUDANÇA 2: cenários com QTD ITEM N intercalado ──
+
+    # Cenário 1 item
     for item in todos_itens:
         liberados = [p for p in item_pedidos[item] if pedido_itens[p] - {item} == set()]
         for p in liberados:
             info = pedido_info[p]
             rows_det.append({
-                "CENARIO": "1 item", "QTD ITENS": 1,
-                "ITEM 1": item, "ITEM 2": "", "ITEM 3": "",
-                "PEDIDO": p, "ESTADO": info["ESTADO"], "REGIAO": info["REGIAO"],
-                "RESTRICAO": info["RESTRICAO"], "STATUS": info["STATUS"],
-                "PESO_KG": info["PESO_KG"],
+                "CENARIO":   "1 item",
+                "QTD ITENS": 1,
+                "ITEM 1":    item,
+                "QTD ITEM 1": int(pedido_qtds[p].get(item, 0)),
+                "ITEM 2":    "",
+                "QTD ITEM 2": "",
+                "ITEM 3":    "",
+                "QTD ITEM 3": "",
+                "PEDIDO":    p,
+                "ESTADO":    info["ESTADO"],
+                "REGIAO":    info["REGIAO"],
+                "RESTRICAO": info["RESTRICAO"],
+                "STATUS":    info["STATUS"],
+                "PESO_KG":   info["PESO_KG"],
             })
 
+    # Cenário 2 itens
     for ia, ib in combinations(todos_itens, 2):
         liberados = [p for p in (item_pedidos[ia] | item_pedidos[ib])
                      if pedido_itens[p] - {ia, ib} == set()]
         for p in liberados:
             info = pedido_info[p]
             rows_det.append({
-                "CENARIO": "2 itens", "QTD ITENS": 2,
-                "ITEM 1": ia, "ITEM 2": ib, "ITEM 3": "",
-                "PEDIDO": p, "ESTADO": info["ESTADO"], "REGIAO": info["REGIAO"],
-                "RESTRICAO": info["RESTRICAO"], "STATUS": info["STATUS"],
-                "PESO_KG": info["PESO_KG"],
+                "CENARIO":   "2 itens",
+                "QTD ITENS": 2,
+                "ITEM 1":    ia,
+                "QTD ITEM 1": int(pedido_qtds[p].get(ia, 0)),
+                "ITEM 2":    ib,
+                "QTD ITEM 2": int(pedido_qtds[p].get(ib, 0)),
+                "ITEM 3":    "",
+                "QTD ITEM 3": "",
+                "PEDIDO":    p,
+                "ESTADO":    info["ESTADO"],
+                "REGIAO":    info["REGIAO"],
+                "RESTRICAO": info["RESTRICAO"],
+                "STATUS":    info["STATUS"],
+                "PESO_KG":   info["PESO_KG"],
             })
 
+    # Cenário 3 itens
     for ia, ib, ic in combinations(todos_itens, 3):
         liberados = [p for p in (item_pedidos[ia] | item_pedidos[ib] | item_pedidos[ic])
                      if pedido_itens[p] - {ia, ib, ic} == set()]
         for p in liberados:
             info = pedido_info[p]
             rows_det.append({
-                "CENARIO": "3 itens", "QTD ITENS": 3,
-                "ITEM 1": ia, "ITEM 2": ib, "ITEM 3": ic,
-                "PEDIDO": p, "ESTADO": info["ESTADO"], "REGIAO": info["REGIAO"],
-                "RESTRICAO": info["RESTRICAO"], "STATUS": info["STATUS"],
-                "PESO_KG": info["PESO_KG"],
+                "CENARIO":   "3 itens",
+                "QTD ITENS": 3,
+                "ITEM 1":    ia,
+                "QTD ITEM 1": int(pedido_qtds[p].get(ia, 0)),
+                "ITEM 2":    ib,
+                "QTD ITEM 2": int(pedido_qtds[p].get(ib, 0)),
+                "ITEM 3":    ic,
+                "QTD ITEM 3": int(pedido_qtds[p].get(ic, 0)),
+                "PEDIDO":    p,
+                "ESTADO":    info["ESTADO"],
+                "REGIAO":    info["REGIAO"],
+                "RESTRICAO": info["RESTRICAO"],
+                "STATUS":    info["STATUS"],
+                "PESO_KG":   info["PESO_KG"],
             })
 
     if not rows_det:
         return None, None, None
 
     df_det = (pd.DataFrame(rows_det)
-                .drop_duplicates(subset=["CENARIO","ITEM 1","ITEM 2","ITEM 3","PEDIDO"])
-                .sort_values(["QTD ITENS","ITEM 1","ITEM 2","ITEM 3","ESTADO"]))
+                .drop_duplicates(subset=["CENARIO", "ITEM 1", "ITEM 2", "ITEM 3", "PEDIDO"])
+                .sort_values(["QTD ITENS", "ITEM 1", "ITEM 2", "ITEM 3", "ESTADO"]))
 
+    # Reordenar colunas do detalhe: ITEM N | QTD ITEM N intercalados
+    cols_det = [
+        "CENARIO", "QTD ITENS",
+        "ITEM 1", "QTD ITEM 1",
+        "ITEM 2", "QTD ITEM 2",
+        "ITEM 3", "QTD ITEM 3",
+        "PEDIDO", "ESTADO", "REGIAO", "RESTRICAO", "STATUS", "PESO_KG",
+    ]
+    df_det = df_det[[c for c in cols_det if c in df_det.columns]]
+
+    # ── MUDANÇA 3: ranking com QTD TOTAL ITEM N ──
     rows_res = []
     for (cenario, i1, i2, i3, n), grp in df_det.groupby(
-            ["CENARIO","ITEM 1","ITEM 2","ITEM 3","QTD ITENS"]):
+            ["CENARIO", "ITEM 1", "ITEM 2", "ITEM 3", "QTD ITENS"]):
         estados = ", ".join(sorted(grp["ESTADO"].unique()))
+
+        def _soma_qtd(col):
+            if col not in grp.columns:
+                return ""
+            s = int(pd.to_numeric(grp[col], errors="coerce").fillna(0).sum())
+            return s if s > 0 else ""
+
         rows_res.append({
-            "CENARIO": cenario, "ITEM 1": i1, "ITEM 2": i2, "ITEM 3": i3,
-            "QTD ITENS": n,
+            "CENARIO":          cenario,
+            "ITEM 1":           i1,
+            "QTD TOTAL ITEM 1": _soma_qtd("QTD ITEM 1") if i1 else "",
+            "ITEM 2":           i2,
+            "QTD TOTAL ITEM 2": _soma_qtd("QTD ITEM 2") if i2 else "",
+            "ITEM 3":           i3,
+            "QTD TOTAL ITEM 3": _soma_qtd("QTD ITEM 3") if i3 else "",
+            "QTD ITENS":        n,
             "PEDIDOS LIBERADOS": len(grp),
-            "% DO TOTAL": f"{round(len(grp)/total*100,1)}%",
-            "PESO TOTAL (kg)": round(grp["PESO_KG"].sum(), 2),
-            "ESTADOS": estados,
+            "% DO TOTAL":       f"{round(len(grp)/total*100,1)}%",
+            "PESO TOTAL (kg)":  round(grp["PESO_KG"].sum(), 2),
+            "ESTADOS":          estados,
         })
+
     df_rank = (pd.DataFrame(rows_res)
-                 .sort_values(["QTD ITENS","PEDIDOS LIBERADOS"], ascending=[True,False]))
+                 .sort_values(["QTD ITENS", "PEDIDOS LIBERADOS"], ascending=[True, False]))
+
+    # Reordenar colunas do ranking: ITEM N | QTD TOTAL ITEM N intercalados
+    cols_rank = [
+        "CENARIO",
+        "ITEM 1", "QTD TOTAL ITEM 1",
+        "ITEM 2", "QTD TOTAL ITEM 2",
+        "ITEM 3", "QTD TOTAL ITEM 3",
+        "QTD ITENS", "PEDIDOS LIBERADOS", "% DO TOTAL", "PESO TOTAL (kg)", "ESTADOS",
+    ]
+    df_rank = df_rank[[c for c in cols_rank if c in df_rank.columns]]
 
     peso_total = sum(v["PESO_KG"] for v in pedido_info.values())
     b1 = df_rank[df_rank["QTD ITENS"]==1].iloc[0] if not df_rank[df_rank["QTD ITENS"]==1].empty else None
@@ -968,7 +1043,6 @@ def gerar_excel(df_lib, df_bloq, df_cons, df_falt, df_est, df_resumo, df_estado,
     if "VISAO_GERENCIAL" in wb.sheetnames:
         idx = wb.sheetnames.index("VISAO_GERENCIAL")
         wb.move_sheet("VISAO_GERENCIAL", offset=-idx)
-    # Adicionar abas da análise de itens se disponível
     if df_rank is not None:
         _escrever_aba_analise(wb, "ANALISE_RANKING",  df_rank, "RANKING DE COMBINACOES DE ITENS", "0054A6")
         _escrever_aba_analise(wb, "ANALISE_DETALHE",  df_det,  "DETALHE POR PEDIDO — FILTRAVEL",   "217A3C")
@@ -982,8 +1056,6 @@ def gerar_excel_analise(df_rank, df_det, df_sum) -> bytes:
     wb = Workbook()
     del wb["Sheet"]
 
-    f_azul   = PatternFill("solid", fgColor="0054A6")
-    f_verde  = PatternFill("solid", fgColor="217A3C")
     f_cinza  = PatternFill("solid", fgColor="F4F6FA")
     f_branco = PatternFill("solid", fgColor="FFFFFF")
     f_titulo = PatternFill("solid", fgColor="002D6B")
@@ -1521,11 +1593,11 @@ with tab_analise:
         sub_rank, sub_det = st.tabs(["Ranking de Combos", "Detalhe por Pedido"])
 
         with sub_rank:
-            st.caption(f"{len(df_rank):,} combinacoes  ·  filtre por CENARIO ou ITEM")
+            st.caption(f"{len(df_rank):,} combinacoes  ·  filtre por CENARIO ou ITEM  ·  QTD TOTAL = unidades necessarias para atender todos os pedidos do combo")
             st.dataframe(df_rank, use_container_width=True, hide_index=True)
 
         with sub_det:
-            st.caption(f"{len(df_det):,} linhas  ·  filtre por estado, restricao ou status")
+            st.caption(f"{len(df_det):,} linhas  ·  filtre por estado, restricao ou status  ·  QTD ITEM = unidades necessarias naquele pedido especifico")
             st.dataframe(df_det, use_container_width=True, hide_index=True)
 
 
@@ -1546,6 +1618,6 @@ with col_dl:
     )
 with col_txt:
     st.caption(
-        f"8+ abas: Visao Gerencial · Resumo · Liberados · Nao Liberados · Por Estado · Por Status · Consumo · Faltas · Estoque Final · Analise Ranking · Analise Detalhe"
+        f"10 abas: Visao Gerencial · Resumo · Liberados · Nao Liberados · Por Estado · Por Status · Consumo · Faltas · Estoque Final · Analise Ranking · Analise Detalhe"
         f"  ·  Gerado em {date.today().strftime('%d/%m/%Y')}"
     )
