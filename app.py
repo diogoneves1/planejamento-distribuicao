@@ -572,10 +572,12 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
         for i in range(1, 15):
             item  = norm_item(row.get(f"ITEM_{i}"))
             falta = row.get(f"FALTA_{i}", 0)
-            qtd   = row.get(f"QTD_NECESSARIA_{i}", falta)  # usa QTD_NECESSARIA se existir
+            qtd   = row.get(f"QTD_NECESSARIA_{i}", falta)
             if item and pd.notna(falta) and float(falta) > 0:
                 itens_falta.add(item)
-                qtds_falta[item] = float(qtd) if pd.notna(qtd) else float(falta)
+                # Usa QTD_NECESSARIA se válida e > 0; senão cai para FALTA
+                qtd_val = float(qtd) if (pd.notna(qtd) and float(qtd) > 0) else float(falta)
+                qtds_falta[item] = qtd_val
         if itens_falta:
             pedido_itens[pedido] = itens_falta
             pedido_qtds[pedido]  = qtds_falta
@@ -696,7 +698,7 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
             if col not in grp.columns:
                 return ""
             s = int(pd.to_numeric(grp[col], errors="coerce").fillna(0).sum())
-            return s if s > 0 else ""
+            return s  # sempre retorna o valor, mesmo que 0
 
         rows_res.append({
             "CENARIO":          cenario,
