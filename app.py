@@ -626,9 +626,10 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
             })
 
     # Cenário 2 itens
+    # Pedido entra só se precisa EXATAMENTE desses 2 itens (não menos, não mais)
     for ia, ib in combinations(todos_itens, 2):
         liberados = [p for p in (item_pedidos[ia] | item_pedidos[ib])
-                     if pedido_itens[p] - {ia, ib} == set()]
+                     if pedido_itens[p] == {ia, ib}]
         for p in liberados:
             info = pedido_info[p]
             rows_det.append({
@@ -649,9 +650,10 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
             })
 
     # Cenário 3 itens
+    # Pedido entra só se precisa EXATAMENTE desses 3 itens (não menos, não mais)
     for ia, ib, ic in combinations(todos_itens, 3):
         liberados = [p for p in (item_pedidos[ia] | item_pedidos[ib] | item_pedidos[ic])
-                     if pedido_itens[p] - {ia, ib, ic} == set()]
+                     if pedido_itens[p] == {ia, ib, ic}]
         for p in liberados:
             info = pedido_info[p]
             rows_det.append({
