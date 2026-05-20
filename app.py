@@ -50,7 +50,7 @@ section[data-testid="stSidebar"] h4 {
 }
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] .stMarkdown p {
-    color: #5A6A8A !important;
+    color: #fffff !important;
     font-size: 11.5px !important;
     line-height: 1.55;
 }
