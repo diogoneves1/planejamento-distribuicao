@@ -11,12 +11,12 @@ from openpyxl.utils import get_column_letter
 # CONFIGURAÇÃO
 # ──────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Liberacao de Pedidos v3.3",
+    page_title="Liberacao de Pedidos v3.4",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-VERSION = "3.3"
+VERSION = "3.4"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CONSTANTES
@@ -138,12 +138,13 @@ def montar_estoque(df: pd.DataFrame) -> dict:
     return estoque
 
 
-def aplicar_filtros(df, regioes, estados, clientes, restricoes, pedidos_filtro):
-    if regioes:        df = df[df["REGIÃO"].isin(regioes)]
-    if estados:        df = df[df["ESTADO"].isin(estados)]
-    if clientes:       df = df[df["CLIENTE"].isin(clientes)]
-    if restricoes:     df = df[df["RESTRICAO"].isin(restricoes)]
-    if pedidos_filtro: df = df[df["PEDIDO"].astype(str).isin([str(p) for p in pedidos_filtro])]
+def aplicar_filtros(df, regioes, estados, clientes, restricoes, pedidos_filtro, estados_excluir=None):
+    if regioes:         df = df[df["REGIÃO"].isin(regioes)]
+    if estados:         df = df[df["ESTADO"].isin(estados)]
+    if clientes:        df = df[df["CLIENTE"].isin(clientes)]
+    if restricoes:      df = df[df["RESTRICAO"].isin(restricoes)]
+    if pedidos_filtro:  df = df[df["PEDIDO"].astype(str).isin([str(p) for p in pedidos_filtro])]
+    if estados_excluir: df = df[~df["ESTADO"].isin(estados_excluir)]
     return df
 
 
@@ -1322,6 +1323,10 @@ with st.sidebar:
     f_cliente   = st.multiselect("Cliente",   opcoes_cliente,   placeholder="Todos")
     f_restricao = st.multiselect("Restricao", opcoes_restricao, placeholder="Todas")
 
+    st.markdown('<div class="sb-section">Exclusoes</div>', unsafe_allow_html=True)
+    st.caption("Estados selecionados aqui sao removidos da analise (uso tipico: grade de liberacao por dia).")
+    f_estado_excluir = st.multiselect("Excluir Estados", opcoes_estado, placeholder="Nenhum")
+
     st.markdown("---")
     rodar = st.button("Gerar Analise", use_container_width=True)
 
@@ -1408,7 +1413,7 @@ with st.spinner("Processando analise..."):
         st.warning("Nenhum pedido no periodo selecionado.")
         st.stop()
 
-    df_f = aplicar_filtros(df_f, f_regiao, f_estado, f_cliente, f_restricao, f_pedido)
+    df_f = aplicar_filtros(df_f, f_regiao, f_estado, f_cliente, f_restricao, f_pedido, f_estado_excluir)
     if df_f.empty:
         st.warning("Nenhum pedido com os filtros aplicados.")
         st.stop()
