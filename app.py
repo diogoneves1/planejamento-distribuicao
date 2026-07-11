@@ -1,4 +1,3 @@
-import unicodedata
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -11,25 +10,317 @@ from openpyxl.utils import get_column_letter
 # CONFIGURAÇÃO
 # ──────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Liberacao de Pedidos v3.4",
+    page_title="Liberacao de Pedidos v3.2 IA",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-VERSION = "3.4"
+VERSION = "3.2"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ESTILOS
+# ──────────────────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+html, body, [class*="css"], .stApp {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    font-size: 13px;
+    color: #1C2B4A;
+    -webkit-font-smoothing: antialiased;
+}
+.stApp { background-color: #F4F6FA; }
+
+/* ── Sidebar ── */
+section[data-testid="stSidebar"] {
+    background-color: #FFFFFF !important;
+    border-right: 1px solid #E8ECF2 !important;
+}
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] h4 {
+    color: #1C2B4A !important;
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    margin: 0 !important;
+}
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] .stMarkdown p {
+    color: #5A6A8A !important;
+    font-size: 11.5px !important;
+    line-height: 1.55;
+}
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label,
+section[data-testid="stSidebar"] .stWidgetLabel p {
+    color: #1C2B4A !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+}
+section[data-testid="stSidebar"] div[role="radiogroup"] label p,
+section[data-testid="stSidebar"] div[role="radiogroup"] label span,
+section[data-testid="stSidebar"] div[role="radiogroup"] label {
+    color: #1C2B4A !important;
+    font-size: 12px !important;
+    font-weight: 400 !important;
+}
+section[data-testid="stSidebar"] input {
+    background: #FFFFFF !important;
+    color: #1C2B4A !important;
+    border: 1px solid #C8D0E4 !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+}
+section[data-testid="stSidebar"] input:focus {
+    border-color: #0054A6 !important;
+    box-shadow: 0 0 0 3px rgba(0,84,166,0.12) !important;
+}
+section[data-testid="stSidebar"] input::placeholder { color: #9CAABE !important; }
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
+    background: #FFFFFF !important;
+    border: 1px solid #C8D0E4 !important;
+    border-radius: 6px !important;
+    color: #1C2B4A !important;
+}
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div:focus-within {
+    border-color: #0054A6 !important;
+    box-shadow: 0 0 0 3px rgba(0,84,166,0.12) !important;
+}
+section[data-testid="stSidebar"] div[data-baseweb="select"] input {
+    color: #1C2B4A !important;
+    background: transparent !important;
+    border: none !important;
+}
+section[data-testid="stSidebar"] span[data-baseweb="tag"] {
+    background-color: #EBF2FF !important;
+    border: 1px solid #BDD3F5 !important;
+    border-radius: 4px !important;
+}
+section[data-testid="stSidebar"] span[data-baseweb="tag"] span {
+    color: #003D80 !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+}
+section[data-testid="stSidebar"] [data-baseweb="tag"] svg { fill: #5A8AC8 !important; }
+section[data-testid="stSidebar"] hr {
+    border-color: #E8ECF2 !important;
+    margin: 14px 0 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+    background: #F7F9FC !important;
+    border: 1.5px dashed #C8D0E4 !important;
+    border-radius: 8px !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] p,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] span,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] small {
+    color: #5A6A8A !important;
+    font-size: 11.5px !important;
+}
+section[data-testid="stSidebar"] .stAlert {
+    background: #0054A6 !important;
+    border: 1px solid #003D80 !important;
+    border-radius: 6px !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+}
+section[data-testid="stSidebar"] .stAlert p,
+section[data-testid="stSidebar"] .stAlert span,
+section[data-testid="stSidebar"] .stAlert div { color: #FFFFFF !important; }
+section[data-testid="stSidebar"] .stAlert svg { fill: #FFFFFF !important; }
+
+/* ── Botões ── */
+.stButton > button {
+    background-color: #0054A6 !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 12.5px !important;
+    padding: 9px 22px !important;
+    box-shadow: 0 1px 4px rgba(0,84,166,0.25) !important;
+    transition: background-color 0.15s !important;
+}
+.stButton > button:hover { background-color: #003D80 !important; }
+.stDownloadButton > button {
+    background-color: #FFFFFF !important;
+    color: #0054A6 !important;
+    border: 1.5px solid #0054A6 !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 12.5px !important;
+    padding: 9px 22px !important;
+}
+.stDownloadButton > button:hover { background-color: #EBF2FF !important; }
+
+/* ── Métricas ── */
+[data-testid="stMetric"] {
+    background: #FFFFFF !important;
+    border-radius: 8px !important;
+    padding: 16px 18px !important;
+    border: 1px solid #E8ECF2 !important;
+    border-top: 3px solid #0054A6 !important;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.06) !important;
+}
+[data-testid="stMetric"] label,
+[data-testid="stMetric"] [data-testid="stMetricLabel"] p {
+    color: #5A6A8A !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}
+[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    color: #1C2B4A !important;
+    font-size: 1.65rem !important;
+    font-weight: 700 !important;
+    line-height: 1.15 !important;
+}
+
+/* ── Abas ── */
+.stTabs [data-baseweb="tab-list"] {
+    background: #FFFFFF !important;
+    border-bottom: 2px solid #E8ECF2 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+}
+.stTabs [data-baseweb="tab"] {
+    background: transparent !important;
+    border-radius: 0 !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #5A6A8A !important;
+    padding: 11px 18px !important;
+    border-bottom: 2px solid transparent !important;
+    margin-bottom: -2px !important;
+}
+.stTabs [aria-selected="true"] {
+    color: #0054A6 !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid #0054A6 !important;
+}
+.stTabs [data-baseweb="tab"]:hover { color: #0054A6 !important; background: #F4F8FF !important; }
+
+/* ── Tabelas / Expander / Hr ── */
+[data-testid="stDataFrame"] {
+    border-radius: 8px !important;
+    border: 1px solid #E8ECF2 !important;
+    overflow: hidden !important;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.05) !important;
+}
+[data-testid="stExpander"] {
+    background: #FFFFFF !important;
+    border: 1px solid #E8ECF2 !important;
+    border-radius: 8px !important;
+}
+hr { border-color: #E8ECF2 !important; margin: 16px 0 !important; }
+.stAlert { border-radius: 6px !important; font-size: 12.5px !important; }
+.stCaption, [data-testid="stCaptionContainer"] p {
+    color: #5A6A8A !important;
+    font-size: 11px !important;
+}
+
+/* ── Cards de gráfico ── */
+.g-card {
+    background: #FFFFFF;
+    border: 1px solid #E8ECF2;
+    border-radius: 8px;
+    padding: 16px 18px 10px 18px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.05);
+}
+.g-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #5A6A8A;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #F0F3F8;
+}
+
+/* ── Topbar ── */
+.topbar {
+    background: #0054A6;
+    padding: 0 28px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: -1rem -1rem 0 -1rem;
+    border-bottom: 1px solid #003D80;
+}
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.topbar-logo { font-size: 14px; font-weight: 700; color: #FFFFFF; }
+.topbar-logo span { font-weight: 300; opacity: 0.7; }
+.topbar-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.25); }
+.topbar-page { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.88); }
+.topbar-right { font-size: 11px; color: rgba(255,255,255,0.5); }
+.topbar-badge {
+    background: rgba(255,255,255,0.15);
+    color: #FFFFFF;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    letter-spacing: 0.05em;
+}
+
+/* ── Breadcrumb ── */
+.breadcrumb {
+    font-size: 11px; color: #9CAABE;
+    margin: 14px 0 6px 0;
+    display: flex; align-items: center; gap: 6px;
+}
+.breadcrumb-sep { color: #C8D0E4; }
+.breadcrumb-current { color: #1C2B4A; font-weight: 500; }
+
+/* ── Sidebar brand ── */
+.sb-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 0 14px 0;
+    border-bottom: 1px solid #E8ECF2;
+    margin-bottom: 16px;
+}
+.sb-brand-icon {
+    width: 32px; height: 32px;
+    background: #0054A6; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: #FFFFFF; font-weight: 700; flex-shrink: 0;
+}
+.sb-brand-name { font-size: 12.5px; font-weight: 600; color: #1C2B4A; line-height: 1.2; }
+.sb-brand-sub  { font-size: 10px; color: #5A6A8A; margin-top: 1px; }
+.sb-section {
+    font-size: 10px; font-weight: 600; color: #9CAABE;
+    text-transform: uppercase; letter-spacing: 0.11em;
+    margin: 16px 0 7px 0;
+}
+
+/* ── Painel KPI ── */
+.kpi-panel {
+    background: #FFFFFF; border: 1px solid #E8ECF2;
+    border-radius: 8px; padding: 16px 18px 12px 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(28,43,74,0.05);
+}
+.kpi-panel-title {
+    font-size: 10px; font-weight: 700; color: #5A6A8A;
+    text-transform: uppercase; letter-spacing: 0.09em;
+    margin-bottom: 12px; padding-bottom: 8px;
+    border-bottom: 1px solid #F0F3F8;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CONSTANTES
 # ──────────────────────────────────────────────────────────────────────────────
-# Pedidos com estes status JÁ consumiram estoque (ex.: separados/aguardando
-# logística) e por isso NÃO entram na análise de liberação nem aparecem nos
-# resultados. Cada item é uma lista de termos que devem TODOS aparecer (AND),
-# comparados de forma normalizada (sem acento, minúsculo, "/" vira espaço).
-# Para adicionar outro status a excluir, basta acrescentar uma nova lista.
-STATUS_EXCLUIR_TERMOS = [
-    ["aguardando", "envio", "logistica"],
-]
-
 COLUNAS_OBRIGATORIAS = [
     "PEDIDO", "CLIENTE", "ESTADO", "REGIÃO",
     "FATURAR EM", "ITEM", "QNTD PROGRAMADA", "ESTOQUE INICIAL"
@@ -60,34 +351,6 @@ def fmt_peso(kg: float) -> str:
 # FUNÇÕES DE NEGÓCIO
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _norm_status(s) -> str:
-    """Normaliza um status para comparação: sem acento, minúsculo,
-    '/', '.', '-', '_' viram espaço e espaços são colapsados."""
-    if pd.isna(s):
-        return ""
-    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode("ascii").lower()
-    for ch in ["/", ".", "-", "_"]:
-        s = s.replace(ch, " ")
-    return " ".join(s.split())
-
-
-def is_status_excluido(status) -> bool:
-    """True se o status indica pedido que já consumiu estoque (excluir da análise)."""
-    n = _norm_status(status)
-    return any(all(termo in n for termo in termos) for termos in STATUS_EXCLUIR_TERMOS)
-
-
-def remover_status_consumidos(df: pd.DataFrame):
-    """Remove da base os pedidos cujo status já consumiu estoque.
-    Retorna (df_filtrado, qtd_linhas_removidas, qtd_pedidos_removidos)."""
-    if "STATUS" not in df.columns:
-        return df, 0, 0
-    mask_excluir = df["STATUS"].apply(is_status_excluido)
-    qtd_linhas   = int(mask_excluir.sum())
-    qtd_pedidos  = int(df.loc[mask_excluir, "PEDIDO"].nunique()) if qtd_linhas else 0
-    return df.loc[~mask_excluir].copy(), qtd_linhas, qtd_pedidos
-
-
 def preparar_base(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = df.columns.str.strip().str.upper()
@@ -116,13 +379,6 @@ def preparar_base(df: pd.DataFrame) -> pd.DataFrame:
         df["STATUS"] = "Nao informado"
     else:
         df["STATUS"] = df["STATUS"].fillna("Nao informado")
-
-    # Remove pedidos que já consumiram estoque (ex.: Aguardando Envio p/ Logística).
-    # Feito aqui, na base completa, ANTES de montar o estoque, para que o saldo
-    # usado na simulação não considere esses pedidos.
-    df, _linhas_rem, _pedidos_rem = remover_status_consumidos(df)
-    df.attrs["linhas_removidas_status"]  = _linhas_rem
-    df.attrs["pedidos_removidos_status"] = _pedidos_rem
     return df
 
 
@@ -138,13 +394,12 @@ def montar_estoque(df: pd.DataFrame) -> dict:
     return estoque
 
 
-def aplicar_filtros(df, regioes, estados, clientes, restricoes, pedidos_filtro, estados_excluir=None):
-    if regioes:         df = df[df["REGIÃO"].isin(regioes)]
-    if estados:         df = df[df["ESTADO"].isin(estados)]
-    if clientes:        df = df[df["CLIENTE"].isin(clientes)]
-    if restricoes:      df = df[df["RESTRICAO"].isin(restricoes)]
-    if pedidos_filtro:  df = df[df["PEDIDO"].astype(str).isin([str(p) for p in pedidos_filtro])]
-    if estados_excluir: df = df[~df["ESTADO"].isin(estados_excluir)]
+def aplicar_filtros(df, regioes, estados, clientes, restricoes, pedidos_filtro):
+    if regioes:        df = df[df["REGIÃO"].isin(regioes)]
+    if estados:        df = df[df["ESTADO"].isin(estados)]
+    if clientes:       df = df[df["CLIENTE"].isin(clientes)]
+    if restricoes:     df = df[df["RESTRICAO"].isin(restricoes)]
+    if pedidos_filtro: df = df[df["PEDIDO"].astype(str).isin([str(p) for p in pedidos_filtro])]
     return df
 
 
@@ -289,6 +544,7 @@ def resumo_por_status(df_lib):
 def gerar_analise_itens(df_bloq: pd.DataFrame):
     """
     Analisa pedidos bloqueados: quantos seriam liberados repondo 1, 2 ou 3 itens.
+    v3.2: inclui QTD NECESSARIA por item no detalhe e QTD TOTAL por item no ranking.
     Retorna (df_ranking, df_detalhe, df_resumo) ou (None, None, None).
     """
     from itertools import combinations
@@ -304,8 +560,9 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
         except:
             return str(v).strip()
 
-    pedido_itens = {}
-    pedido_qtds  = {}
+    # ── MUDANÇA 1: adicionar pedido_qtds para armazenar QTD_NECESSARIA por item ──
+    pedido_itens = {}   # pedido → set de itens em falta
+    pedido_qtds  = {}   # pedido → {item: qtd_necessaria}
     pedido_info  = {}
 
     for _, row in df_bloq.iterrows():
@@ -318,6 +575,7 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
             qtd   = row.get(f"QTD_NECESSARIA_{i}", falta)
             if item and pd.notna(falta) and float(falta) > 0:
                 itens_falta.add(item)
+                # Usa QTD_NECESSARIA se válida e > 0; senão cai para FALTA
                 qtd_val = float(qtd) if (pd.notna(qtd) and float(qtd) > 0) else float(falta)
                 qtds_falta[item] = qtd_val
         if itens_falta:
@@ -343,6 +601,9 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
     todos_itens = list(item_pedidos.keys())
     rows_det = []
 
+    # ── MUDANÇA 2: cenários com QTD ITEM N intercalado ──
+
+    # Cenário 1 item
     for item in todos_itens:
         liberados = [p for p in item_pedidos[item] if pedido_itens[p] - {item} == set()]
         for p in liberados:
@@ -364,6 +625,8 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
                 "PESO_KG":   info["PESO_KG"],
             })
 
+    # Cenário 2 itens
+    # Pedido entra só se precisa EXATAMENTE desses 2 itens (não menos, não mais)
     for ia, ib in combinations(todos_itens, 2):
         liberados = [p for p in (item_pedidos[ia] | item_pedidos[ib])
                      if pedido_itens[p] == {ia, ib}]
@@ -386,6 +649,8 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
                 "PESO_KG":   info["PESO_KG"],
             })
 
+    # Cenário 3 itens
+    # Pedido entra só se precisa EXATAMENTE desses 3 itens (não menos, não mais)
     for ia, ib, ic in combinations(todos_itens, 3):
         liberados = [p for p in (item_pedidos[ia] | item_pedidos[ib] | item_pedidos[ic])
                      if pedido_itens[p] == {ia, ib, ic}]
@@ -415,6 +680,7 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
                 .drop_duplicates(subset=["CENARIO", "ITEM 1", "ITEM 2", "ITEM 3", "PEDIDO"])
                 .sort_values(["QTD ITENS", "ITEM 1", "ITEM 2", "ITEM 3", "ESTADO"]))
 
+    # Reordenar colunas do detalhe: ITEM N | QTD ITEM N intercalados
     cols_det = [
         "CENARIO", "QTD ITENS",
         "ITEM 1", "QTD ITEM 1",
@@ -424,6 +690,7 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
     ]
     df_det = df_det[[c for c in cols_det if c in df_det.columns]]
 
+    # ── MUDANÇA 3: ranking com QTD TOTAL ITEM N ──
     rows_res = []
     for (cenario, i1, i2, i3, n), grp in df_det.groupby(
             ["CENARIO", "ITEM 1", "ITEM 2", "ITEM 3", "QTD ITENS"]):
@@ -433,7 +700,7 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
             if col not in grp.columns:
                 return ""
             s = int(pd.to_numeric(grp[col], errors="coerce").fillna(0).sum())
-            return s
+            return s  # sempre retorna o valor, mesmo que 0
 
         rows_res.append({
             "CENARIO":          cenario,
@@ -453,6 +720,7 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
     df_rank = (pd.DataFrame(rows_res)
                  .sort_values(["QTD ITENS", "PEDIDOS LIBERADOS"], ascending=[True, False]))
 
+    # Reordenar colunas do ranking: ITEM N | QTD TOTAL ITEM N intercalados
     cols_rank = [
         "CENARIO",
         "ITEM 1", "QTD TOTAL ITEM 1",
@@ -498,6 +766,385 @@ def gerar_analise_itens(df_bloq: pd.DataFrame):
 
     return df_rank, df_det, df_sum
 
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# FUNÇÕES IA — Ollama local
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# FUNÇÕES ROTEIRIZAÇÃO
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Paleta de cores por status (para a fila de pedidos na roteirizacao)
+CORES_STATUS = {
+    "Aprovado para Faturar":                         "#217A3C",
+    "Aguardando Liberação - Com Estoque Parcial":    "#B85C00",
+    "Aguardando Liberação - Sem Estoque":            "#C0392B",
+    "Bloqueado - Restrição Comercial":               "#8B5CF6",
+    "Em Análise":                                    "#0891B2",
+    "Nao informado":                                 "#5A6A8A",
+}
+
+
+def cor_status(status: str) -> str:
+    """Retorna a cor associada a um status, ou cinza padrao."""
+    return CORES_STATUS.get(str(status), "#5A6A8A")
+
+
+def preparar_pedidos_rota(df_lib: pd.DataFrame, df_base: pd.DataFrame) -> pd.DataFrame:
+    """
+    Monta a lista de pedidos liberados para roteirizacao.
+    Caixas = soma de QNTD PROGRAMADA de todos os itens do pedido.
+    Peso = PESO_TON (em kg) ja calculado.
+    """
+    if df_lib.empty:
+        return pd.DataFrame(columns=["PEDIDO", "CLIENTE", "ESTADO", "STATUS", "PESO_KG", "CAIXAS"])
+
+    # Somar caixas por pedido a partir da base
+    caixas_por_pedido = (
+        df_base.groupby("PEDIDO")["QNTD PROGRAMADA"].sum().to_dict()
+        if "QNTD PROGRAMADA" in df_base.columns else {}
+    )
+
+    rows = []
+    for _, row in df_lib.iterrows():
+        pedido = row["PEDIDO"]
+        rows.append({
+            "PEDIDO":  pedido,
+            "CLIENTE": row.get("CLIENTE", ""),
+            "ESTADO":  row.get("ESTADO", ""),
+            "STATUS":  row.get("STATUS", "Nao informado"),
+            "PESO_KG": round(float(row.get("PESO_TON", 0) or 0), 2),
+            "CAIXAS":  int(caixas_por_pedido.get(pedido, 0)),
+        })
+
+    df = pd.DataFrame(rows).sort_values(["ESTADO", "PEDIDO"]).reset_index(drop=True)
+    return df
+
+
+def gerar_excel_roteirizacao(veiculos: dict, alocacoes: dict, pedidos_rota: pd.DataFrame) -> bytes:
+    """
+    Gera o Excel da roteirizacao.
+    veiculos: {id: {"nome":..., "capacidade_kg":..., "data":...}}
+    alocacoes: {id_veiculo: [{"PEDIDO":..., "CAIXAS":..., "PESO_KG":..., ...}, ...]}
+    """
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    del wb["Sheet"]
+
+    f_titulo = PatternFill("solid", fgColor="002D6B")
+    f_navy   = PatternFill("solid", fgColor="0054A6")
+    f_cinza  = PatternFill("solid", fgColor="F4F6FA")
+    f_branco = PatternFill("solid", fgColor="FFFFFF")
+    f_sep    = PatternFill("solid", fgColor="E8ECF2")
+
+    fn_title = Font(name="Calibri", bold=True, color="FFFFFF", size=13)
+    fn_hdr   = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
+    fn_norm  = Font(name="Calibri", size=10, color="1C2B4A")
+    fn_tot   = Font(name="Calibri", bold=True, size=11, color="0054A6")
+    fn_sub   = Font(name="Calibri", italic=True, size=9, color="5A6A8A")
+
+    centro = Alignment(horizontal="center", vertical="center")
+    esq    = Alignment(horizontal="left",   vertical="center")
+    dir_   = Alignment(horizontal="right",  vertical="center")
+
+    # ── Aba RESUMO ──
+    ws = wb.create_sheet("RESUMO")
+    ws.sheet_view.showGridLines = False
+    ws.column_dimensions["A"].width = 2
+    for col, w in zip("BCDEFG", [22, 16, 12, 12, 18, 16]):
+        ws.column_dimensions[col].width = w
+
+    ws.row_dimensions[2].height = 28
+    ws.merge_cells("B2:G2")
+    c = ws.cell(2, 2); c.value = "ROTEIRIZACAO — RESUMO DAS CARGAS"
+    c.font = fn_title; c.fill = f_titulo; c.alignment = esq
+    for col in range(2, 8): ws.cell(2, col).fill = f_titulo
+
+    ws.row_dimensions[4].height = 16
+    for j, lbl in enumerate(["VEICULO", "DATA CARREG.", "CAIXAS", "PESO (kg)", "CAPACIDADE (kg)", "% OCUPACAO"], 2):
+        c = ws.cell(4, j); c.value = lbl; c.font = fn_hdr; c.fill = f_navy; c.alignment = centro
+
+    linha = 5
+    tot_caixas = 0
+    tot_peso   = 0
+    for vid, vinfo in veiculos.items():
+        pedidos_v = alocacoes.get(vid, [])
+        caixas_v  = sum(p["CAIXAS"] for p in pedidos_v)
+        peso_v    = round(sum(p["PESO_KG"] for p in pedidos_v), 2)
+        cap_v     = vinfo.get("capacidade_kg", 0) or 0
+        ocup      = round(peso_v / cap_v * 100, 1) if cap_v else 0
+        tot_caixas += caixas_v
+        tot_peso   += peso_v
+
+        fill = f_cinza if (linha % 2 == 0) else f_branco
+        vals = [
+            vinfo.get("nome", f"Veiculo {vid}"),
+            vinfo.get("data", "-"),
+            caixas_v,
+            peso_v,
+            cap_v,
+            f"{ocup}%",
+        ]
+        for j, val in enumerate(vals, 2):
+            c = ws.cell(linha, j); c.value = val; c.font = fn_norm; c.fill = fill
+            c.alignment = esq if j == 2 else (centro if j in (3, 7) else dir_)
+        ws.row_dimensions[linha].height = 15
+        linha += 1
+
+    # Total
+    for j in range(2, 8): ws.cell(linha, j).fill = f_sep
+    ws.cell(linha, 2).value = "TOTAL"; ws.cell(linha, 2).font = fn_tot; ws.cell(linha, 2).alignment = esq
+    ws.cell(linha, 4).value = tot_caixas; ws.cell(linha, 4).font = fn_tot; ws.cell(linha, 4).alignment = centro
+    ws.cell(linha, 5).value = round(tot_peso, 2); ws.cell(linha, 5).font = fn_tot; ws.cell(linha, 5).alignment = dir_
+    ws.row_dimensions[linha].height = 16
+    ws.freeze_panes = "B5"
+
+    # ── Uma aba por veiculo ──
+    for vid, vinfo in veiculos.items():
+        pedidos_v = alocacoes.get(vid, [])
+        if not pedidos_v:
+            continue
+        nome_aba = str(vinfo.get("nome", f"Veiculo {vid}"))[:28].replace("/", "-").replace("\\", "-")
+        ws = wb.create_sheet(nome_aba)
+        ws.sheet_view.showGridLines = False
+        ws.column_dimensions["A"].width = 2
+        for col, w in zip("BCDEF", [16, 32, 10, 12, 14]):
+            ws.column_dimensions[col].width = w
+
+        ws.row_dimensions[2].height = 28
+        ws.merge_cells("B2:F2")
+        c = ws.cell(2, 2); c.value = f"{vinfo.get('nome','Veiculo')}  |  Carreg.: {vinfo.get('data','-')}"
+        c.font = fn_title; c.fill = f_titulo; c.alignment = esq
+        for col in range(2, 7): ws.cell(2, col).fill = f_titulo
+
+        cap_v  = vinfo.get("capacidade_kg", 0) or 0
+        peso_v = round(sum(p["PESO_KG"] for p in pedidos_v), 2)
+        cx_v   = sum(p["CAIXAS"] for p in pedidos_v)
+        ws.row_dimensions[3].height = 14
+        ws.merge_cells("B3:F3")
+        c = ws.cell(3, 2)
+        c.value = f"{len(pedidos_v)} pedidos  ·  {cx_v} caixas  ·  {peso_v} kg  ·  capacidade {cap_v} kg"
+        c.font = fn_sub; c.alignment = esq
+
+        ws.row_dimensions[5].height = 16
+        for j, lbl in enumerate(["PEDIDO", "CLIENTE", "ESTADO", "CAIXAS", "PESO (kg)"], 2):
+            c = ws.cell(5, j); c.value = lbl; c.font = fn_hdr; c.fill = f_navy; c.alignment = centro
+
+        r = 6
+        for i, p in enumerate(pedidos_v):
+            fill = f_cinza if i % 2 == 0 else f_branco
+            vals = [p["PEDIDO"], p.get("CLIENTE", ""), p.get("ESTADO", ""), p["CAIXAS"], p["PESO_KG"]]
+            for j, val in enumerate(vals, 2):
+                c = ws.cell(r, j); c.value = val; c.font = fn_norm; c.fill = fill
+                c.alignment = dir_ if j in (5, 6) else (centro if j in (4, 4) else esq)
+            ws.row_dimensions[r].height = 15
+            r += 1
+
+        for j in range(2, 7): ws.cell(r, j).fill = f_sep
+        ws.cell(r, 2).value = "TOTAL"; ws.cell(r, 2).font = fn_tot; ws.cell(r, 2).alignment = esq
+        ws.cell(r, 5).value = cx_v;   ws.cell(r, 5).font = fn_tot; ws.cell(r, 5).alignment = centro
+        ws.cell(r, 6).value = peso_v; ws.cell(r, 6).font = fn_tot; ws.cell(r, 6).alignment = dir_
+        ws.freeze_panes = "B6"
+
+    output = BytesIO()
+    wb.save(output)
+    return output.getvalue()
+
+
+def montar_prompt_ia(df_lib, df_bloq, df_falt, df_cons, df_estado, df_status):
+    import pandas as pd
+
+    total      = len(df_lib) + len(df_bloq)
+    liberados  = len(df_lib)
+    bloqueados = len(df_bloq)
+    taxa       = round(liberados / total * 100, 1) if total else 0
+
+    # ── Peso ──
+    ton_lib  = round(df_lib["PESO_TON"].sum() / 1000,  2) if not df_lib.empty  and "PESO_TON" in df_lib.columns else 0
+    ton_bloq = round(df_bloq["PESO_TON"].sum() / 1000, 2) if not df_bloq.empty and "PESO_TON" in df_bloq.columns else 0
+
+    # ── Itens em falta — top 15 ──
+    top_faltas = df_falt.head(15).to_string(index=False) if not df_falt.empty else "Nenhum item em falta."
+
+    # ── Estados — todos ──
+    top_estados = df_estado.to_string(index=False) if not df_estado.empty else "Sem dados por estado."
+
+    # ── Status ──
+    top_status = df_status.to_string(index=False) if not df_status.empty else "Sem dados por status."
+
+    # ── Consumo top 10 ──
+    top_cons = df_cons.head(10).to_string(index=False) if not df_cons.empty else "Sem dados de consumo."
+
+    # ── Cruzamento: bloqueados por restricao ──
+    if not df_bloq.empty and "RESTRICAO" in df_bloq.columns:
+        bloq_restricao = df_bloq.groupby("RESTRICAO")["PEDIDO"].count().reset_index()
+        bloq_restricao.columns = ["RESTRICAO", "PEDIDOS_BLOQUEADOS"]
+        bloq_restricao_str = bloq_restricao.to_string(index=False)
+    else:
+        bloq_restricao_str = "Sem dados."
+
+    # ── Cruzamento: liberados por restricao ──
+    if not df_lib.empty and "RESTRICAO" in df_lib.columns:
+        lib_restricao = df_lib.groupby("RESTRICAO")["PEDIDO"].count().reset_index()
+        lib_restricao.columns = ["RESTRICAO", "PEDIDOS_LIBERADOS"]
+        lib_restricao_str = lib_restricao.to_string(index=False)
+    else:
+        lib_restricao_str = "Sem dados."
+
+    # ── Cruzamento: peso retido por estado (top 8) ──
+    if not df_estado.empty and "TON_RETIDAS" in df_estado.columns:
+        peso_retido = df_estado[["ESTADO","TON_RETIDAS","PED_BLOQUEADOS"]].sort_values("TON_RETIDAS", ascending=False).head(8)
+        peso_retido_str = peso_retido.to_string(index=False)
+    else:
+        peso_retido_str = "Sem dados."
+
+    # ── Cruzamento: estados com taxa de liberacao abaixo de 50% ──
+    if not df_estado.empty and "TX_LIBERACAO" in df_estado.columns:
+        estados_criticos = df_estado[df_estado["TX_LIBERACAO"] < 50][["ESTADO","TX_LIBERACAO","PED_BLOQUEADOS","TON_RETIDAS"]]
+        estados_criticos_str = estados_criticos.to_string(index=False) if not estados_criticos.empty else "Nenhum estado abaixo de 50%."
+    else:
+        estados_criticos_str = "Sem dados."
+
+    # ── Cruzamento: itens em falta x pedidos bloqueados (quantos pedidos cada item trava) ──
+    if not df_bloq.empty:
+        item_cols = [c for c in df_bloq.columns if c.startswith("ITEM_")]
+        item_count = {}
+        for col in item_cols:
+            for val in df_bloq[col].dropna():
+                if str(val).strip() not in ("", "nan"):
+                    item_count[str(val)] = item_count.get(str(val), 0) + 1
+        if item_count:
+            df_item_count = pd.DataFrame(
+                sorted(item_count.items(), key=lambda x: -x[1]),
+                columns=["ITEM", "PEDIDOS_TRAVADOS"]
+            ).head(15)
+            item_count_str = df_item_count.to_string(index=False)
+        else:
+            item_count_str = "Sem dados."
+    else:
+        item_count_str = "Sem dados."
+
+    # ── Cruzamento: status x estado (liberados) ──
+    if not df_lib.empty and "STATUS" in df_lib.columns and "ESTADO" in df_lib.columns:
+        status_estado = df_lib.groupby(["ESTADO","STATUS"])["PEDIDO"].count().reset_index()
+        status_estado.columns = ["ESTADO","STATUS","QTDE"]
+        status_estado_str = status_estado.sort_values("QTDE", ascending=False).head(15).to_string(index=False)
+    else:
+        status_estado_str = "Sem dados."
+
+    prompt = (
+        "Voce e um analista senior especialista em Supply Chain, PCP, logistica e planejamento de distribuicao. "
+        "Analise profundamente os dados abaixo de uma simulacao de liberacao de pedidos e gere um relatorio "
+        "executivo completo, rico em insights e cruzamentos de dados. "
+        "Seja especifico, cite numeros, codigos de itens e nomes de estados. "
+        "Responda DIRETAMENTE sem cabecalho, sem saudacao, sem data, sem formato de carta. "
+        "Comece imediatamente com '## 1. Resumo Executivo'.\n\n"
+
+        "=== VISAO GERAL ===\n"
+        f"- Total de pedidos analisados: {total}\n"
+        f"- Pedidos liberados: {liberados} ({taxa}%)\n"
+        f"- Pedidos bloqueados: {bloqueados} ({round(100-taxa,1)}%)\n"
+        f"- Toneladas liberadas: {ton_lib} ton\n"
+        f"- Toneladas retidas (bloqueadas): {ton_bloq} ton\n\n"
+
+        "=== ITENS EM FALTA (codigo | quantidade total em falta) ===\n"
+        f"{top_faltas}\n\n"
+
+        "=== ITENS QUE MAIS TRAVAM PEDIDOS (item | qtde pedidos bloqueados) ===\n"
+        f"{item_count_str}\n\n"
+
+        "=== CONSUMO DOS ITENS LIBERADOS (top 10) ===\n"
+        f"{top_cons}\n\n"
+
+        "=== DESEMPENHO POR ESTADO (liberados | bloqueados | ton lib | ton ret | tx%) ===\n"
+        f"{top_estados}\n\n"
+
+        "=== ESTADOS CRITICOS — TAXA DE LIBERACAO ABAIXO DE 50% ===\n"
+        f"{estados_criticos_str}\n\n"
+
+        "=== ESTADOS COM MAIOR PESO RETIDO ===\n"
+        f"{peso_retido_str}\n\n"
+
+        "=== PEDIDOS BLOQUEADOS POR TIPO DE RESTRICAO ===\n"
+        f"{bloq_restricao_str}\n\n"
+
+        "=== PEDIDOS LIBERADOS POR TIPO DE RESTRICAO ===\n"
+        f"{lib_restricao_str}\n\n"
+
+        "=== STATUS DOS PEDIDOS LIBERADOS ===\n"
+        f"{top_status}\n\n"
+
+        "=== STATUS X ESTADO (pedidos liberados) ===\n"
+        f"{status_estado_str}\n\n"
+
+        "Gere o relatorio com os 6 topicos abaixo. Cada topico deve ter no minimo 5-8 itens ou paragrafos, "
+        "com cruzamentos de dados, numeros especificos e insights acionaveis.\n\n"
+
+        "## 1. Resumo Executivo\n"
+        "Panorama geral da operacao: taxa de liberacao, volume fisico liberado vs retido em toneladas, "
+        "distribuicao regional, perfil de restricoes e status predominante. "
+        "Compare o desempenho entre regioes e destaque o cenario mais critico.\n\n"
+
+        "## 2. Analise de Gargalos e Ruptura de Estoque\n"
+        "Identifique os itens com maior impacto: quantos pedidos cada item trava, "
+        "qual o volume fisico associado a cada falta, quais combinacoes de itens em falta "
+        "sao mais criticas. Cruce item em falta x estado mais afetado. "
+        "Destaque itens com estoque zerado vs estoque parcial.\n\n"
+
+        "## 3. Impacto Regional e por Estado\n"
+        "Analise cada estado critico: taxa de liberacao, peso retido, pedidos bloqueados. "
+        "Identifique quais estados concentram o maior risco operacional. "
+        "Cruce restricao x estado: ha estados com alto percentual de pedidos com restricao? "
+        "Qual regiao esta mais prejudicada no total?\n\n"
+
+        "## 4. Analise de Restricoes e Status\n"
+        "Avalie o impacto das restricoes (SIM, NAO, Ajustar Base) nos bloqueios. "
+        "Pedidos com restricao estao travando mais ou menos que os sem restricao? "
+        "Analise a distribuicao de status: o que os status revelam sobre o fluxo operacional? "
+        "Ha acumulo de pedidos em algum status especifico que indica gargalo no processo?\n\n"
+
+        "## 5. Recomendacoes Prioritarias e Plano de Acao\n"
+        "Liste acoes priorizadas por impacto potencial:\n"
+        "- Quais itens repor primeiro e em qual quantidade minima para desbloquear o maior numero de pedidos\n"
+        "- Quais estados atender com urgencia\n"
+        "- Como reordenar a fila de prioridade para maximizar toneladas liberadas\n"
+        "- Acoes para resolver pedidos com restricao\n"
+        "- Sugestoes de ajuste no planejamento de estoque\n\n"
+
+        "## 6. Riscos e Pontos Criticos de Atencao\n"
+        "Destaque os principais riscos operacionais: itens com estoque zerado sem previsao, "
+        "estados com 0% de liberacao, pedidos com multiplos itens em falta simultaneamente, "
+        "concentracao de risco em poucos itens criticos, impacto financeiro estimado do volume retido "
+        "e risco de perda de clientes por atraso de entrega.\n\n"
+
+        "Seja analitico, profundo e acionavel. Use os dados fornecidos. Nao invente numeros."
+    )
+    return prompt
+def chamar_ollama(prompt: str) -> str:
+    import requests
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "gemma4:e2b-it-q4_K_M",
+                "prompt": prompt,
+                "stream": False,
+            },
+            timeout=300,
+        )
+        response.raise_for_status()
+        return response.json().get("response", "Sem resposta do modelo.")
+    except requests.exceptions.ConnectionError:
+        return "**Erro:** Nao foi possivel conectar ao Ollama. Verifique se o servico esta rodando em http://localhost:11434"
+    except requests.exceptions.Timeout:
+        return "**Erro:** Timeout ao aguardar resposta do modelo. Tente novamente."
+    except Exception as e:
+        return f"**Erro inesperado:** {str(e)}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # EXCEL — helpers
@@ -546,9 +1193,9 @@ def _mesclar(ws, r, c1, c2, valor, font, fill=None, align=None):
 
 
 def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, df_status, hoje):
-    """Aba de visão gerencial: KPIs + tabelas por estado e por status.
-    v3.3: gráficos do Excel REMOVIDOS (renderizavam em branco). Os gráficos
-    interativos continuam disponíveis no dashboard Streamlit."""
+    from openpyxl.chart import BarChart, PieChart, Reference
+    from openpyxl.chart.series import DataPoint
+
     if "VISAO_GERENCIAL" in wb.sheetnames:
         del wb["VISAO_GERENCIAL"]
     ws = wb.create_sheet("VISAO_GERENCIAL", 0)
@@ -586,10 +1233,10 @@ def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, d
     for ln, h in {1:5, 2:26, 3:5, 4:12, 5:24, 6:12, 7:24, 8:5,
                   9:12, 10:16, 11:16, 12:16, 13:16, 14:16, 15:5,
                   16:12, 17:16, 18:16, 19:16, 20:16, 21:16, 22:5,
-                  23:5, 24:12, 25:16, 26:16, 27:16, 28:16}.items():
+                  23:5, 24:12, 25:16, 26:16, 27:16, 28:16, 29:5, 30:12}.items():
         ws.row_dimensions[ln].height = h
 
-    _preencher(ws, 1, 1, 60, 13, f_cinza)
+    _preencher(ws, 1, 1, 80, 13, f_cinza)
 
     _preencher(ws, 2, 1, 2, 13, f_titulo)
     _mesclar(ws, 2, 2, 9, f"  VISAO GERENCIAL — LIBERACAO DE PEDIDOS  |  v{VERSION}", fn_titulo, f_titulo,
@@ -672,6 +1319,39 @@ def _visao_gerencial(wb, df_lib, df_bloq, df_cons, df_falt, df_est, df_estado, d
 
     _preencher(ws, 28, 1, 28, 13, f_sep)
 
+    # Gráficos
+    ws.row_dimensions[29].height = 12
+    _preencher(ws, 29, 2, 29, 12, f_navy)
+    _mesclar(ws, 29, 2, 12, "GRAFICOS GERENCIAIS", fn_hdr, f_navy, centro)
+
+    ws.cell(65, 1).value = "Liberados"; ws.cell(66, 1).value = "Bloqueados"
+    ws.cell(65, 2).value = len(df_lib);  ws.cell(66, 2).value = len(df_bloq)
+
+    pizza = PieChart(); pizza.title = "Liberados vs Bloqueados"
+    pizza.style = 10; pizza.width = 10; pizza.height = 7
+    pizza.add_data(Reference(ws, min_col=2, min_row=65, max_row=66))
+    pizza.set_categories(Reference(ws, min_col=1, min_row=65, max_row=66))
+    dp0 = DataPoint(idx=0); dp0.graphicalProperties.solidFill = "0054A6"
+    dp1 = DataPoint(idx=1); dp1.graphicalProperties.solidFill = "C5D3E8"
+    pizza.series[0].dPt = [dp0, dp1]
+    ws.add_chart(pizza, "B30")
+
+    if not df_estado.empty:
+        est_top = df_estado.head(8)
+        ws.cell(65,4).value="Estado"; ws.cell(65,5).value="Ton Lib"; ws.cell(65,6).value="Ton Ret"
+        for i, rd in enumerate(est_top.itertuples()):
+            ws.cell(66+i,4).value=rd.ESTADO; ws.cell(66+i,5).value=float(rd.TON_LIBERADAS); ws.cell(66+i,6).value=float(rd.TON_RETIDAS)
+        n = len(est_top)
+        barras = BarChart(); barras.type="col"; barras.title="Peso por Estado"
+        barras.style=10; barras.width=14; barras.height=7; barras.grouping="clustered"
+        barras.add_data(Reference(ws,min_col=5,min_row=65,max_row=65+n),titles_from_data=True)
+        barras.add_data(Reference(ws,min_col=6,min_row=65,max_row=65+n),titles_from_data=True)
+        barras.set_categories(Reference(ws,min_col=4,min_row=66,max_row=65+n))
+        barras.series[0].graphicalProperties.solidFill="0054A6"
+        barras.series[1].graphicalProperties.solidFill="C5D3E8"
+        ws.add_chart(barras, "G30")
+
+    for r in range(65, 85): ws.row_dimensions[r].hidden = True
     ws.freeze_panes = "A3"
     ws.sheet_view.showGridLines = False
 
@@ -800,6 +1480,7 @@ def gerar_excel_analise(df_rank, df_det, df_sum) -> bytes:
         ws.freeze_panes = "B5"
         ws.auto_filter.ref = f"B4:{get_column_letter(ncols+1)}4"
 
+    # RESUMO
     ws_r = wb.create_sheet("RESUMO", 0)
     ws_r.sheet_view.showGridLines = False
     ws_r.column_dimensions["A"].width = 2
@@ -829,7 +1510,7 @@ def gerar_excel_analise(df_rank, df_det, df_sum) -> bytes:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# GRÁFICOS (Plotly — dashboard interativo)
+# GRÁFICOS
 # ──────────────────────────────────────────────────────────────────────────────
 
 _L = dict(
@@ -846,7 +1527,6 @@ def fig_donut(liberados, bloqueados):
         labels=["Liberados","Bloqueados"], values=[liberados,bloqueados], hole=0.72,
         marker=dict(colors=[C_BLUE,"#C5D3E8"], line=dict(color="#FFFFFF",width=2)),
         textinfo="none", hovertemplate="%{label}: %{value} (%{percent})<extra></extra>",
-        sort=False,
     ))
     fig.add_annotation(
         text=f"<b style='font-size:22px;color:{C_BLUE}'>{pct}%</b><br>"
@@ -959,298 +1639,6 @@ def fig_analise_itens(df_rank):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ESTILOS
-# ──────────────────────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
-html, body, [class*="css"], .stApp {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
-    font-size: 13px;
-    color: #1C2B4A;
-    -webkit-font-smoothing: antialiased;
-}
-.stApp { background-color: #F4F6FA; }
-
-section[data-testid="stSidebar"] {
-    background-color: #FFFFFF !important;
-    border-right: 1px solid #E8ECF2 !important;
-}
-section[data-testid="stSidebar"] h1,
-section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3,
-section[data-testid="stSidebar"] h4 {
-    color: #1C2B4A !important;
-    font-size: 10.5px !important;
-    font-weight: 600 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    margin: 0 !important;
-}
-section[data-testid="stSidebar"] p,
-section[data-testid="stSidebar"] .stMarkdown p {
-    color: #5A6A8A !important;
-    font-size: 11.5px !important;
-    line-height: 1.55;
-}
-section[data-testid="stSidebar"] label,
-section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
-section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label,
-section[data-testid="stSidebar"] .stWidgetLabel p {
-    color: #1C2B4A !important;
-    font-size: 11.5px !important;
-    font-weight: 500 !important;
-}
-section[data-testid="stSidebar"] div[role="radiogroup"] label p,
-section[data-testid="stSidebar"] div[role="radiogroup"] label span,
-section[data-testid="stSidebar"] div[role="radiogroup"] label {
-    color: #1C2B4A !important;
-    font-size: 12px !important;
-    font-weight: 400 !important;
-}
-section[data-testid="stSidebar"] input {
-    background: #FFFFFF !important;
-    color: #1C2B4A !important;
-    border: 1px solid #C8D0E4 !important;
-    border-radius: 6px !important;
-    font-size: 12px !important;
-}
-section[data-testid="stSidebar"] input:focus {
-    border-color: #0054A6 !important;
-    box-shadow: 0 0 0 3px rgba(0,84,166,0.12) !important;
-}
-section[data-testid="stSidebar"] input::placeholder { color: #9CAABE !important; }
-section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-    background: #FFFFFF !important;
-    border: 1px solid #C8D0E4 !important;
-    border-radius: 6px !important;
-    color: #1C2B4A !important;
-}
-section[data-testid="stSidebar"] div[data-baseweb="select"] > div:focus-within {
-    border-color: #0054A6 !important;
-    box-shadow: 0 0 0 3px rgba(0,84,166,0.12) !important;
-}
-section[data-testid="stSidebar"] div[data-baseweb="select"] input {
-    color: #1C2B4A !important;
-    background: transparent !important;
-    border: none !important;
-}
-section[data-testid="stSidebar"] span[data-baseweb="tag"] {
-    background-color: #EBF2FF !important;
-    border: 1px solid #BDD3F5 !important;
-    border-radius: 4px !important;
-}
-section[data-testid="stSidebar"] span[data-baseweb="tag"] span {
-    color: #003D80 !important;
-    font-size: 11px !important;
-    font-weight: 500 !important;
-}
-section[data-testid="stSidebar"] [data-baseweb="tag"] svg { fill: #5A8AC8 !important; }
-section[data-testid="stSidebar"] hr {
-    border-color: #E8ECF2 !important;
-    margin: 14px 0 !important;
-}
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
-    background: #F7F9FC !important;
-    border: 1.5px dashed #C8D0E4 !important;
-    border-radius: 8px !important;
-}
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] p,
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] span,
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] small {
-    color: #5A6A8A !important;
-    font-size: 11.5px !important;
-}
-section[data-testid="stSidebar"] .stAlert {
-    background: #0054A6 !important;
-    border: 1px solid #003D80 !important;
-    border-radius: 6px !important;
-    font-size: 11.5px !important;
-    font-weight: 600 !important;
-}
-section[data-testid="stSidebar"] .stAlert p,
-section[data-testid="stSidebar"] .stAlert span,
-section[data-testid="stSidebar"] .stAlert div { color: #FFFFFF !important; }
-section[data-testid="stSidebar"] .stAlert svg { fill: #FFFFFF !important; }
-
-.stButton > button {
-    background-color: #0054A6 !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    border-radius: 6px !important;
-    font-weight: 600 !important;
-    font-size: 12.5px !important;
-    padding: 9px 22px !important;
-    box-shadow: 0 1px 4px rgba(0,84,166,0.25) !important;
-    transition: background-color 0.15s !important;
-}
-.stButton > button:hover { background-color: #003D80 !important; }
-.stDownloadButton > button {
-    background-color: #FFFFFF !important;
-    color: #0054A6 !important;
-    border: 1.5px solid #0054A6 !important;
-    border-radius: 6px !important;
-    font-weight: 600 !important;
-    font-size: 12.5px !important;
-    padding: 9px 22px !important;
-}
-.stDownloadButton > button:hover { background-color: #EBF2FF !important; }
-
-[data-testid="stMetric"] {
-    background: #FFFFFF !important;
-    border-radius: 8px !important;
-    padding: 16px 18px !important;
-    border: 1px solid #E8ECF2 !important;
-    border-top: 3px solid #0054A6 !important;
-    box-shadow: 0 1px 4px rgba(28,43,74,0.06) !important;
-}
-[data-testid="stMetric"] label,
-[data-testid="stMetric"] [data-testid="stMetricLabel"] p {
-    color: #5A6A8A !important;
-    font-size: 10px !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.08em !important;
-}
-[data-testid="stMetric"] [data-testid="stMetricValue"] {
-    color: #1C2B4A !important;
-    font-size: 1.65rem !important;
-    font-weight: 700 !important;
-    line-height: 1.15 !important;
-}
-
-.stTabs [data-baseweb="tab-list"] {
-    background: #FFFFFF !important;
-    border-bottom: 2px solid #E8ECF2 !important;
-    padding: 0 !important;
-    gap: 0 !important;
-}
-.stTabs [data-baseweb="tab"] {
-    background: transparent !important;
-    border-radius: 0 !important;
-    font-size: 12.5px !important;
-    font-weight: 500 !important;
-    color: #5A6A8A !important;
-    padding: 11px 18px !important;
-    border-bottom: 2px solid transparent !important;
-    margin-bottom: -2px !important;
-}
-.stTabs [aria-selected="true"] {
-    color: #0054A6 !important;
-    font-weight: 600 !important;
-    border-bottom: 2px solid #0054A6 !important;
-}
-.stTabs [data-baseweb="tab"]:hover { color: #0054A6 !important; background: #F4F8FF !important; }
-
-[data-testid="stDataFrame"] {
-    border-radius: 8px !important;
-    border: 1px solid #E8ECF2 !important;
-    overflow: hidden !important;
-    box-shadow: 0 1px 4px rgba(28,43,74,0.05) !important;
-}
-[data-testid="stExpander"] {
-    background: #FFFFFF !important;
-    border: 1px solid #E8ECF2 !important;
-    border-radius: 8px !important;
-}
-hr { border-color: #E8ECF2 !important; margin: 16px 0 !important; }
-.stAlert { border-radius: 6px !important; font-size: 12.5px !important; }
-.stCaption, [data-testid="stCaptionContainer"] p {
-    color: #5A6A8A !important;
-    font-size: 11px !important;
-}
-
-.g-card {
-    background: #FFFFFF;
-    border: 1px solid #E8ECF2;
-    border-radius: 8px;
-    padding: 16px 18px 10px 18px;
-    margin-bottom: 12px;
-    box-shadow: 0 1px 4px rgba(28,43,74,0.05);
-}
-.g-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: #5A6A8A;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #F0F3F8;
-}
-
-.topbar {
-    background: #0054A6;
-    padding: 0 28px;
-    height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: -1rem -1rem 0 -1rem;
-    border-bottom: 1px solid #003D80;
-}
-.topbar-left { display: flex; align-items: center; gap: 16px; }
-.topbar-logo { font-size: 14px; font-weight: 700; color: #FFFFFF; }
-.topbar-logo span { font-weight: 300; opacity: 0.7; }
-.topbar-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.25); }
-.topbar-page { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.88); }
-.topbar-right { font-size: 11px; color: rgba(255,255,255,0.5); }
-.topbar-badge {
-    background: rgba(255,255,255,0.15);
-    color: #FFFFFF;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 10px;
-    letter-spacing: 0.05em;
-}
-
-.breadcrumb {
-    font-size: 11px; color: #9CAABE;
-    margin: 14px 0 6px 0;
-    display: flex; align-items: center; gap: 6px;
-}
-.breadcrumb-sep { color: #C8D0E4; }
-.breadcrumb-current { color: #1C2B4A; font-weight: 500; }
-
-.sb-brand {
-    display: flex; align-items: center; gap: 10px;
-    padding: 16px 0 14px 0;
-    border-bottom: 1px solid #E8ECF2;
-    margin-bottom: 16px;
-}
-.sb-brand-icon {
-    width: 32px; height: 32px;
-    background: #0054A6; border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; color: #FFFFFF; font-weight: 700; flex-shrink: 0;
-}
-.sb-brand-name { font-size: 12.5px; font-weight: 600; color: #1C2B4A; line-height: 1.2; }
-.sb-brand-sub  { font-size: 10px; color: #5A6A8A; margin-top: 1px; }
-.sb-section {
-    font-size: 10px; font-weight: 600; color: #9CAABE;
-    text-transform: uppercase; letter-spacing: 0.11em;
-    margin: 16px 0 7px 0;
-}
-
-.kpi-panel {
-    background: #FFFFFF; border: 1px solid #E8ECF2;
-    border-radius: 8px; padding: 16px 18px 12px 18px;
-    margin-bottom: 16px;
-    box-shadow: 0 1px 4px rgba(28,43,74,0.05);
-}
-.kpi-panel-title {
-    font-size: 10px; font-weight: 700; color: #5A6A8A;
-    text-transform: uppercase; letter-spacing: 0.09em;
-    margin-bottom: 12px; padding-bottom: 8px;
-    border-bottom: 1px solid #F0F3F8;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # SIDEBAR
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1287,16 +1675,12 @@ with st.sidebar:
     opcoes_pedidos   = []
     df_global = None
     tem_peso  = False
-    linhas_removidas_status  = 0
-    pedidos_removidos_status = 0
 
     if arquivo:
         try:
             df_tmp = preparar_base(pd.read_excel(arquivo))
             if not validar_colunas(df_tmp):
                 df_global        = df_tmp
-                linhas_removidas_status  = df_tmp.attrs.get("linhas_removidas_status", 0)
-                pedidos_removidos_status = df_tmp.attrs.get("pedidos_removidos_status", 0)
                 opcoes_regiao    = sorted(df_tmp["REGIÃO"].dropna().unique())
                 opcoes_estado    = sorted(df_tmp["ESTADO"].dropna().unique())
                 opcoes_cliente   = sorted(df_tmp["CLIENTE"].dropna().unique())
@@ -1323,12 +1707,15 @@ with st.sidebar:
     f_cliente   = st.multiselect("Cliente",   opcoes_cliente,   placeholder="Todos")
     f_restricao = st.multiselect("Restricao", opcoes_restricao, placeholder="Todas")
 
-    st.markdown('<div class="sb-section">Exclusoes</div>', unsafe_allow_html=True)
-    st.caption("Estados selecionados aqui sao removidos da analise (uso tipico: grade de liberacao por dia).")
-    f_estado_excluir = st.multiselect("Excluir Estados", opcoes_estado, placeholder="Nenhum")
-
     st.markdown("---")
-    rodar = st.button("Gerar Analise", use_container_width=True)
+
+    if "rodar_analise" not in st.session_state:
+        st.session_state.rodar_analise = False
+
+    if st.button("Gerar Analise", use_container_width=True):
+        st.session_state.rodar_analise = True
+
+    rodar = st.session_state.rodar_analise
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1375,14 +1762,6 @@ df = df_global
 if not tem_peso:
     st.warning("Coluna PESO nao encontrada. Peso sera exibido como zero.")
 
-# Aviso sobre pedidos excluídos por já terem consumido estoque
-if pedidos_removidos_status > 0:
-    st.info(
-        f"{pedidos_removidos_status} pedido(s) ({linhas_removidas_status} linha(s)) "
-        f"com status de envio para logistica ja consumiram estoque e foram "
-        f"excluidos da analise."
-    )
-
 with st.expander("Visualizar base carregada", expanded=False):
     st.dataframe(df.head(100), use_container_width=True, hide_index=True)
     peso_info = "  ·  coluna PESO detectada" if tem_peso else "  ·  sem coluna PESO"
@@ -1413,7 +1792,7 @@ with st.spinner("Processando analise..."):
         st.warning("Nenhum pedido no periodo selecionado.")
         st.stop()
 
-    df_f = aplicar_filtros(df_f, f_regiao, f_estado, f_cliente, f_restricao, f_pedido, f_estado_excluir)
+    df_f = aplicar_filtros(df_f, f_regiao, f_estado, f_cliente, f_restricao, f_pedido)
     if df_f.empty:
         st.warning("Nenhum pedido com os filtros aplicados.")
         st.stop()
@@ -1462,7 +1841,7 @@ st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 # ABAS
 # ──────────────────────────────────────────────────────────────────────────────
 
-tab_dash, tab_status, tab_estado, tab_lib, tab_bloq, tab_falt, tab_cons, tab_est, tab_analise = st.tabs([
+tab_dash, tab_status, tab_estado, tab_lib, tab_bloq, tab_falt, tab_cons, tab_est, tab_analise, tab_ia, tab_rota = st.tabs([
     "Visao Gerencial",
     "Por Status",
     "Por Estado",
@@ -1472,9 +1851,12 @@ tab_dash, tab_status, tab_estado, tab_lib, tab_bloq, tab_falt, tab_cons, tab_est
     "Consumo por Item",
     "Estoque Final",
     "Analise de Itens",
+    "Analise IA",
+    "Roteirizacao",
 ])
 
 
+# ── VISÃO GERENCIAL ──────────────────────────────────────────────────────────
 with tab_dash:
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
@@ -1512,6 +1894,7 @@ with tab_dash:
         st.markdown('</div>', unsafe_allow_html=True)
 
 
+# ── POR STATUS ───────────────────────────────────────────────────────────────
 with tab_status:
     if df_status.empty:
         st.info("Sem dados de status.")
@@ -1520,6 +1903,7 @@ with tab_status:
         st.dataframe(df_status, use_container_width=True, hide_index=True)
 
 
+# ── POR ESTADO ───────────────────────────────────────────────────────────────
 with tab_estado:
     if df_estado.empty:
         st.info("Sem dados por estado.")
@@ -1528,6 +1912,7 @@ with tab_estado:
         st.dataframe(df_estado, use_container_width=True, hide_index=True)
 
 
+# ── LIBERADOS ────────────────────────────────────────────────────────────────
 with tab_lib:
     if df_lib.empty:
         st.warning("Nenhum pedido foi liberado.")
@@ -1536,6 +1921,7 @@ with tab_lib:
         st.dataframe(df_lib, use_container_width=True, hide_index=True)
 
 
+# ── NAO LIBERADOS ────────────────────────────────────────────────────────────
 with tab_bloq:
     if df_bloq.empty:
         st.success("Todos os pedidos foram liberados.")
@@ -1544,6 +1930,7 @@ with tab_bloq:
         st.dataframe(df_bloq, use_container_width=True, hide_index=True)
 
 
+# ── FALTAS ───────────────────────────────────────────────────────────────────
 with tab_falt:
     if df_falt.empty:
         st.success("Nenhum item em falta.")
@@ -1552,6 +1939,7 @@ with tab_falt:
         st.dataframe(df_falt, use_container_width=True, hide_index=True)
 
 
+# ── CONSUMO ──────────────────────────────────────────────────────────────────
 with tab_cons:
     if df_cons.empty:
         st.info("Sem consumo registrado.")
@@ -1560,11 +1948,13 @@ with tab_cons:
         st.dataframe(df_cons, use_container_width=True, hide_index=True)
 
 
+# ── ESTOQUE FINAL ─────────────────────────────────────────────────────────────
 with tab_est:
     st.caption("Saldo simulado por item apos liberacao dos pedidos possiveis")
     st.dataframe(df_est, use_container_width=True, hide_index=True)
 
 
+# ── ANALISE DE ITENS ─────────────────────────────────────────────────────────
 with tab_analise:
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
@@ -1603,6 +1993,295 @@ with tab_analise:
             st.dataframe(df_det, use_container_width=True, hide_index=True)
 
 
+# ── ANALISE IA ───────────────────────────────────────────────────────────────
+with tab_ia:
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown('<div class="kpi-panel"><div class="kpi-panel-title">Analise Executiva — Gerada com IA Local (Ollama)</div>', unsafe_allow_html=True)
+    st.caption("A IA interpreta o resultado ja calculado pelo sistema e gera uma analise operacional. Nao altera nenhuma logica de liberacao.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if "resposta_ia" not in st.session_state:
+        st.session_state.resposta_ia = ""
+
+    if st.button("Gerar Analise IA", use_container_width=False):
+        with st.spinner("Aguardando resposta do modelo local... isso pode levar alguns segundos."):
+            prompt   = montar_prompt_ia(df_lib, df_bloq, df_falt, df_cons, df_estado, df_status)
+            resposta = chamar_ollama(prompt)
+            st.session_state.resposta_ia = resposta
+
+    if st.session_state.resposta_ia:
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        st.markdown('<div class="g-card"><div class="g-label">Analise Gerada</div>', unsafe_allow_html=True)
+        st.markdown(st.session_state.resposta_ia)
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("Clique em 'Gerar Analise IA' para iniciar a analise executiva com o modelo local.")
+
+
+# ── ROTEIRIZACAO ─────────────────────────────────────────────────────────────
+with tab_rota:
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    if df_lib.empty:
+        st.info("Nenhum pedido liberado para roteirizar. Gere a analise primeiro.")
+    else:
+        # Preparar pedidos disponíveis
+        pedidos_rota = preparar_pedidos_rota(df_lib, df)
+
+        # ── Estado da sessão ──
+        if "rota_veiculos" not in st.session_state:
+            st.session_state.rota_veiculos = {}      # {id: {nome, capacidade_kg, data}}
+        if "rota_alocacoes" not in st.session_state:
+            st.session_state.rota_alocacoes = {}     # {id_veiculo: [pedido_dict, ...]}
+        if "rota_next_id" not in st.session_state:
+            st.session_state.rota_next_id = 1
+
+        # Conjunto de pedidos já alocados (para remover da fila)
+        pedidos_alocados = set()
+        for lst in st.session_state.rota_alocacoes.values():
+            for p in lst:
+                pedidos_alocados.add(p["PEDIDO"])
+
+        # ── Cabeçalho com KPIs ──
+        total_pedidos   = len(pedidos_rota)
+        pedidos_na_fila = total_pedidos - len(pedidos_alocados)
+        total_veiculos  = len(st.session_state.rota_veiculos)
+
+        st.markdown('<div class="kpi-panel"><div class="kpi-panel-title">Roteirizacao — Formacao de Cargas</div>', unsafe_allow_html=True)
+        kr1, kr2, kr3, kr4 = st.columns(4)
+        kr1.metric("Pedidos Liberados", f"{total_pedidos:,}")
+        kr2.metric("Na Fila",           f"{pedidos_na_fila:,}")
+        kr3.metric("Alocados",          f"{len(pedidos_alocados):,}")
+        kr4.metric("Veiculos",          f"{total_veiculos:,}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        # ── Layout: fila (esquerda) + veículos (direita) ──
+        col_fila, col_veiculos = st.columns([1, 2])
+
+        # ══════════════════════════════════════════════════════════
+        # PAINEL ESQUERDO — FILA DE PEDIDOS
+        # ══════════════════════════════════════════════════════════
+        with col_fila:
+            st.markdown('<div class="g-card"><div class="g-label">Fila de Pedidos Liberados</div>', unsafe_allow_html=True)
+
+            # Filtros da fila
+            estados_disp = sorted(pedidos_rota["ESTADO"].unique())
+            filtro_estado_rota = st.multiselect("Filtrar estado", estados_disp, placeholder="Todos", key="rota_filtro_estado")
+            busca_pedido = st.text_input("Buscar pedido", placeholder="Numero do pedido", key="rota_busca")
+
+            # Aplicar filtros
+            fila = pedidos_rota[~pedidos_rota["PEDIDO"].isin(pedidos_alocados)].copy()
+            if filtro_estado_rota:
+                fila = fila[fila["ESTADO"].isin(filtro_estado_rota)]
+            if busca_pedido:
+                fila = fila[fila["PEDIDO"].astype(str).str.contains(busca_pedido, case=False, na=False)]
+
+            st.caption(f"{len(fila)} pedidos na fila")
+
+            # Lista de veículos para o seletor de alocação
+            opcoes_veiculos = {
+                vid: vinfo.get("nome", f"Veiculo {vid}")
+                for vid, vinfo in st.session_state.rota_veiculos.items()
+            }
+
+            if fila.empty:
+                st.info("Nenhum pedido na fila com os filtros atuais.")
+            else:
+                # Agrupar por estado
+                for estado in sorted(fila["ESTADO"].unique()):
+                    grupo = fila[fila["ESTADO"] == estado]
+                    st.markdown(f"**{estado}** · {len(grupo)} pedidos")
+
+                    for _, ped in grupo.iterrows():
+                        cor = cor_status(ped["STATUS"])
+                        st.markdown(
+                            f'<div style="border-left:4px solid {cor}; background:#FFFFFF; '
+                            f'border:1px solid #E8ECF2; border-left:4px solid {cor}; '
+                            f'border-radius:6px; padding:8px 10px; margin-bottom:6px;">'
+                            f'<div style="font-weight:600; font-size:12px; color:#1C2B4A;">{ped["PEDIDO"]}</div>'
+                            f'<div style="font-size:10.5px; color:#5A6A8A;">{ped["CLIENTE"][:32]}</div>'
+                            f'<div style="font-size:10.5px; color:#1C2B4A; margin-top:2px;">'
+                            f'{ped["CAIXAS"]} cx · {fmt_peso(ped["PESO_KG"])} · '
+                            f'<span style="color:{cor};">{ped["STATUS"]}</span></div>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+                        # Botão de alocação
+                        if opcoes_veiculos:
+                            cbtn1, cbtn2 = st.columns([2, 1])
+                            with cbtn1:
+                                destino = st.selectbox(
+                                    "Veiculo", list(opcoes_veiculos.keys()),
+                                    format_func=lambda v: opcoes_veiculos[v],
+                                    key=f"dest_{ped['PEDIDO']}", label_visibility="collapsed"
+                                )
+                            with cbtn2:
+                                if st.button("Alocar", key=f"aloc_{ped['PEDIDO']}", use_container_width=True):
+                                    p_dict = {
+                                        "PEDIDO":  ped["PEDIDO"],
+                                        "CLIENTE": ped["CLIENTE"],
+                                        "ESTADO":  ped["ESTADO"],
+                                        "STATUS":  ped["STATUS"],
+                                        "CAIXAS":  int(ped["CAIXAS"]),
+                                        "PESO_KG": float(ped["PESO_KG"]),
+                                    }
+                                    st.session_state.rota_alocacoes.setdefault(destino, []).append(p_dict)
+                                    st.rerun()
+                        else:
+                            st.caption("Crie um veiculo ao lado para alocar")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # ══════════════════════════════════════════════════════════
+        # PAINEL DIREITO — VEÍCULOS
+        # ══════════════════════════════════════════════════════════
+        with col_veiculos:
+            # Botão adicionar veículo
+            cadd1, cadd2 = st.columns([1, 3])
+            with cadd1:
+                if st.button("+ Adicionar Veiculo", use_container_width=True):
+                    vid = st.session_state.rota_next_id
+                    st.session_state.rota_veiculos[vid] = {
+                        "nome": f"Veiculo {vid:02d}",
+                        "capacidade_kg": 0,
+                        "data": "",
+                    }
+                    st.session_state.rota_alocacoes[vid] = []
+                    st.session_state.rota_next_id += 1
+                    st.rerun()
+            with cadd2:
+                st.caption("Cada veiculo e um card de carga. Defina nome, capacidade e data de carregamento.")
+
+            if not st.session_state.rota_veiculos:
+                st.info("Nenhum veiculo criado. Clique em '+ Adicionar Veiculo' para comecar a montar as cargas.")
+            else:
+                # Renderizar veículos em grade de 2 colunas
+                vids = list(st.session_state.rota_veiculos.keys())
+                for i in range(0, len(vids), 2):
+                    linha_vids = vids[i:i+2]
+                    cols = st.columns(2)
+                    for col_idx, vid in enumerate(linha_vids):
+                        vinfo    = st.session_state.rota_veiculos[vid]
+                        pedidos_v = st.session_state.rota_alocacoes.get(vid, [])
+                        peso_v   = round(sum(p["PESO_KG"] for p in pedidos_v), 2)
+                        caixas_v = sum(p["CAIXAS"] for p in pedidos_v)
+                        cap_v    = vinfo.get("capacidade_kg", 0) or 0
+                        ocupacao = round(peso_v / cap_v * 100, 1) if cap_v else 0
+
+                        # Cor da barra de ocupação
+                        if ocupacao == 0:      cor_barra = "#C5D3E8"
+                        elif ocupacao <= 70:   cor_barra = "#217A3C"
+                        elif ocupacao <= 100:  cor_barra = "#B85C00"
+                        else:                  cor_barra = "#C0392B"
+
+                        with cols[col_idx]:
+                            st.markdown(
+                                f'<div style="background:#FFFFFF; border:1px solid #E8ECF2; '
+                                f'border-top:3px solid #0054A6; border-radius:8px; padding:12px 14px; '
+                                f'margin-bottom:10px; box-shadow:0 1px 4px rgba(28,43,74,0.05);">',
+                                unsafe_allow_html=True
+                            )
+
+                            # Nome editável
+                            novo_nome = st.text_input(
+                                "Nome", value=vinfo["nome"],
+                                key=f"nome_{vid}", label_visibility="collapsed"
+                            )
+                            if novo_nome != vinfo["nome"]:
+                                st.session_state.rota_veiculos[vid]["nome"] = novo_nome
+
+                            # Capacidade e data
+                            cc1, cc2 = st.columns(2)
+                            with cc1:
+                                nova_cap = st.number_input(
+                                    "Capacidade (kg)", min_value=0, value=int(cap_v),
+                                    step=100, key=f"cap_{vid}"
+                                )
+                                if nova_cap != cap_v:
+                                    st.session_state.rota_veiculos[vid]["capacidade_kg"] = nova_cap
+                            with cc2:
+                                nova_data = st.text_input(
+                                    "Data carreg.", value=vinfo.get("data", ""),
+                                    placeholder="DD/MM/AAAA", key=f"data_{vid}"
+                                )
+                                if nova_data != vinfo.get("data", ""):
+                                    st.session_state.rota_veiculos[vid]["data"] = nova_data
+
+                            # Métricas da carga
+                            st.markdown(
+                                f'<div style="display:flex; justify-content:space-between; '
+                                f'margin:8px 0 4px 0; font-size:11px;">'
+                                f'<span style="color:#5A6A8A;">{len(pedidos_v)} pedidos</span>'
+                                f'<span style="color:#1C2B4A; font-weight:600;">{caixas_v} cx</span>'
+                                f'<span style="color:#1C2B4A; font-weight:600;">{fmt_peso(peso_v)}</span>'
+                                f'</div>',
+                                unsafe_allow_html=True
+                            )
+
+                            # Barra de ocupação
+                            largura = min(ocupacao, 100)
+                            aviso = ""
+                            if cap_v and ocupacao > 100:
+                                aviso = f'<span style="color:#C0392B; font-weight:600;"> · EXCEDIDO</span>'
+                            st.markdown(
+                                f'<div style="background:#F0F3F8; border-radius:4px; height:8px; '
+                                f'overflow:hidden; margin-bottom:4px;">'
+                                f'<div style="background:{cor_barra}; width:{largura}%; height:100%;"></div>'
+                                f'</div>'
+                                f'<div style="font-size:10px; color:#5A6A8A; margin-bottom:8px;">'
+                                f'{ocupacao}% da capacidade{aviso}</div>',
+                                unsafe_allow_html=True
+                            )
+
+                            # Lista de pedidos alocados
+                            if pedidos_v:
+                                for j, p in enumerate(pedidos_v):
+                                    cp1, cp2 = st.columns([4, 1])
+                                    with cp1:
+                                        st.markdown(
+                                            f'<div style="font-size:10.5px; color:#1C2B4A; padding:2px 0;">'
+                                            f'{p["PEDIDO"]} · {p["ESTADO"]} · {p["CAIXAS"]}cx · {fmt_peso(p["PESO_KG"])}</div>',
+                                            unsafe_allow_html=True
+                                        )
+                                    with cp2:
+                                        if st.button("x", key=f"rem_{vid}_{p['PEDIDO']}_{j}", use_container_width=True):
+                                            st.session_state.rota_alocacoes[vid].pop(j)
+                                            st.rerun()
+                            else:
+                                st.caption("Nenhum pedido alocado")
+
+                            # Botão remover veículo
+                            if st.button("Remover Veiculo", key=f"delveic_{vid}", use_container_width=True):
+                                # Devolver pedidos à fila
+                                del st.session_state.rota_veiculos[vid]
+                                if vid in st.session_state.rota_alocacoes:
+                                    del st.session_state.rota_alocacoes[vid]
+                                st.rerun()
+
+                            st.markdown('</div>', unsafe_allow_html=True)
+
+                # ── Exportar roteirização ──
+                st.markdown("---")
+                cexp1, cexp2 = st.columns([1, 2])
+                with cexp1:
+                    rota_bytes = gerar_excel_roteirizacao(
+                        st.session_state.rota_veiculos,
+                        st.session_state.rota_alocacoes,
+                        pedidos_rota
+                    )
+                    st.download_button(
+                        label="Baixar Roteirizacao",
+                        data=rota_bytes,
+                        file_name=f"roteirizacao_{date.today().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
+                with cexp2:
+                    st.caption("Gera Excel com uma aba por veiculo + resumo geral das cargas")
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # EXPORTAR
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1620,6 +2299,6 @@ with col_dl:
     )
 with col_txt:
     st.caption(
-        f"11 abas: Visao Gerencial · Resumo · Liberados · Nao Liberados · Por Estado · Por Status · Consumo · Faltas · Estoque Final · Analise Ranking · Analise Detalhe"
+        f"10 abas: Visao Gerencial · Resumo · Liberados · Nao Liberados · Por Estado · Por Status · Consumo · Faltas · Estoque Final · Analise Ranking · Analise Detalhe"
         f"  ·  Gerado em {date.today().strftime('%d/%m/%Y')}"
     )
